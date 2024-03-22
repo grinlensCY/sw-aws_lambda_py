@@ -15,7 +15,7 @@ class Detector():
         self.istsec = istsec
         self.tsHz = tsHz if not istsec else 1
         self.pkgnum = pkgnum
-        self.len_UL = len_UL    # 有時候aws上有明顯不滿3秒的資料，需要透過這個來結束poo偵測, 
+        self.len_UL = len_UL    # debug: 有時候aws上有明顯不滿3秒的資料，需要透過這個來結束poo偵測, 
         if filterSet is None:
             filterSet = {
                 "typ": "high",
@@ -34,7 +34,7 @@ class Detector():
         self.loadConfig(config)
         self.update_sr(micsr,filterSet,pkglen)
         self.ver = ver
-        #print('\ndetect oddsnd ver.',ver)
+        #print(f'\ndetect oddsnd ver.{ver}  toffset={self.toffset}')
 
     
     def bwfilter(self, data_in=None, sr=None, f_cut=None, N_filt=3, filtype='bandpass',
@@ -381,15 +381,14 @@ class Detector():
         self.mx_marked_density = (max(self.mx_marked_density, self.cnt_marked/self.grp_duration)
                                     if self.cnt_marked > 5
                                     else self.cnt_marked/self.grp_duration)
-        self.msg += (f"\t\tc1={c1}({abs_onestep_gap_lc:.3e} + {abs_onestep_gap_nextlc:.3e} >= {self.main_bigclass2_step_th})  "
+        self.aMsg(f"c1={c1}({abs_onestep_gap_lc:.3e} + {abs_onestep_gap_nextlc:.3e} >= {self.main_bigclass2_step_th})  "
             # f"c12={c12}({abs_onestep_gap_lc:.3e} >= {self.main_bigclass2_step_th})  "
             f"is_prominent={is_prominent}  is_prominent_cnt={self.is_prominent_cnt}  cnt_marked={self.cnt_marked}\n"
-            f"\t\tdensity={self.cnt_marked}/{self.grp_duration}={self.cnt_marked/self.grp_duration:.3f} mx_density={self.mx_marked_density:.3f}\n")
+            f"\t\tdensity={self.cnt_marked}/{self.grp_duration}={self.cnt_marked/self.grp_duration:.3f} mx_density={self.mx_marked_density:.3f}",2)
     
     def closegrp(self, lc, interval, nextlc, snd, is_prominent=False, inRemains=False):
         '''若與下一個標記點距離大於 grp_intvl_th, 確認是否為 短、高Pulse的poo 
         snd: 用於計算ref_lvl
-
         '''
         self.msg += (f"\tclosegrp: interval={interval} > self.grp_intvl_th={self.grp_intvl_th}?  "
                     # f"grp_duration={self.grp_duration} >= {self.min_grp_duration}?  grp_start_sec={self.grp_start_sec:.3f}\n")
@@ -498,7 +497,6 @@ class Detector():
                     f"self.last_idxs_gap_lc={self.last_idxs_gap_lc}")
         self.msg += f"={self.lc2ts(self.last_idxs_gap_lc):.3f}\n" if self.last_idxs_gap_lc is not None else "\n"
         if self.last_idxs_gap_lc is not None:  # 處理前一段裡最後一個idxs_gap
-            # if not self.is_over_lvl_UL and self.grp_start_sec > self.last_env_sec:
             # if not self.is_over_lvl_UL:
             self.countMarkerDuration(self.last_abs_onestep_gap, self.last_abs_onestep_gap_next, self.last_idxs_gap_lc_is_prominent)
             lc0 = self.last_idxs_gap_lc + interval if lc0 is None else lc0
@@ -514,12 +512,6 @@ class Detector():
             計算該group累積的 cnt_marked(不同的權重)
         2. 若與下一個標記點相距超過 一定距離以上的，當作目前group的結尾，確認是否符合條件
         '''
-        # bl_step = self.proc_len//2
-        # bl = min(sndData[:bl_step].max(),sndData[bl_step:].max())
-        # self.last3MxSnd_arry = np.r_[self.last3MxSnd_arry[-2:],bl]
-        # self.last3MxSnd_ref_lvl = np.median(self.last3MxSnd_arry)*2.5 #np.mean(self.last3MxSnd_arry)*2.5
-        # self.msg += f'\nfindspike: self.last3MxSnd_arry={self.formatMsg(self.last3MxSnd_arry,"e3")}  self.last3MxSnd_ref_lvl={self.last3MxSnd_ref_lvl:.3e}\n'
-
         sndData = np.r_[self.lastMainSndData,sndData]
         self.lastMainSndData = sndData[-2:]
         
@@ -561,7 +553,7 @@ class Detector():
             if self.last_idxs_gap_lc is not None:   # 上一段有資料點
                 next_intvl = -self.last_idxs_gap_lc + idxs_gap[0]
                 if self.last_idxs_gap_lc_is_prominent is None:  # 上一段的資料點離結尾太近，尚無法準確判斷該點的lvl 或 上一段沒有點
-                    if self.last_idxs_gap_lc is not None:
+                    if self.last_idxs_gap_lvl is not None:
                         addlen = int(self.grp_intvl_th + self.last_idxs_gap_lc)
                         if addlen:
                             self.last_idxs_gap_lc_is_prominent = max(self.last_idxs_gap_lvl, np.abs(sndData[:addlen]).max()) > self.ref_lvl
@@ -659,7 +651,7 @@ class Detector():
         self.aMsg(f"count of poo pks={cnt} >= 3? farCnt={farCnt} ==> isPoo?{cnt >= 3}"
                     f"\n\tpoo pks= {self.formatMsg(self.poo_ts_list)} sec"
                     f"\n\tintvls of poo pks= {self.formatMsg(intvls)} sec")
-        return cnt >= 3     # 4 poo pks
+        return cnt >= 3     # 4 poo pks 因為從間隔算，第一筆就代表有兩個
 
     def get_poo(self):
         self.msg += (f"get_poo: tNow={self.ti:.3f}-{self.t0:.3f}={self.ti-self.t0:.3f}  "
@@ -764,15 +756,16 @@ class Detector():
         '''
         t0: for debug
         '''
+        # f_stft,t_stft,zxx = signal.stft(main_dat,fs=self.micsr,nperseg=256,noverlap=225,nfft=768,boundary=None) # for 4000sps
         f_stft,t_stft,zxx = signal.stft(main_dat,fs=self.micsr,nperseg=256,noverlap=128,nfft=256,boundary=None) # for 4000sps
         fstep = f_stft[1]
         # tstep = t_stft[1]
-        band_width_lim_Hz = [200,650] # 頻帶的寬度上下限
+        band_width_lim_Hz = [110,650] # 頻帶的寬度上下限
         band_width_lim = band_width_lim_Hz/fstep    #np.round(band_width_lim_Hz/fstep,0).astype('int')
         # print(f"{band_width_lim_Hz}Hz  ==> {band_width_lim} ==> {f_stft[band_width_lim]}Hz")
         zxx = np.log10(np.abs(zxx))
         # [0,1] 用於窄頻偵測的界線; 2: isVeryLowfreq的分界點; 3:找頻帶時的最強pk頻率上限; 4:頻帶的頻率上限; 5:進入harmonic偵測的下限
-        f_lim = [30,400,70,450,850,100]
+        f_lim = [50,400,70,450,850,150]
         flc_lim = np.searchsorted(f_stft, f_lim)    # 頻率界線
         fsum = [400,800]    # 用於計算頻帶強度的分界點
         self.flc_fsum = np.searchsorted(f_stft, fsum)
@@ -783,7 +776,7 @@ class Detector():
         zxx += 4.5  # offset for zeroing
         
         # = ignore noise 與 避免減去backgroud的時候反而反向增強了
-        mask = np.bitwise_or(zxx > 3, zxx < 0)
+        mask = np.bitwise_or(zxx > 4, zxx < 0)
         zxx[mask] = 0
         # zxx[zxx < 0] = 0
         # zxx[:self.flc_fsum[0]+2][zxx[:self.flc_fsum[0]+2] > 4] = 0
@@ -806,6 +799,7 @@ class Detector():
         last_pk_lc = 0
         last_pk_lvl = 0
         pk_lvl_list = []    # 用來判斷該段是否為highPk
+        breakCnt = 0    # 允許中斷一次 if (is_weak_conti_freq or is_conti_freq) and isMoreThan2
         # = 是否屬於極低頻(<70Hz)
         veryLowFreqCnt = 0
         isVeryLowfreq = False
@@ -814,36 +808,74 @@ class Detector():
         strongLowBandCnt = 0
         isStrongLowBand = False
         lowBandCnt = 0
+
+        isMoreThan2 = False
+        isMoreThan1 = False
+
+        pk_lvl_LL = 0.5
+
         for i,tbin in enumerate(zxx.T):
-            band1 = np.sum(tbin[:self.flc_fsum[0]])
-            dens1 = np.count_nonzero(tbin[flc_lim[0]:self.flc_fsum[0]]>=0.45) # 高於門檻值以上的資料點比例(密度)
+            # band1 = np.sum(tbin[:self.flc_fsum[0]])   # 目前沒用到了
+            dens1 = np.count_nonzero(tbin[flc_lim[0]:self.flc_fsum[0]]>=0.45) # 50~400Hz 高於門檻值以上的資料點比例(密度)
             band3 = np.sum(tbin[self.flc_fsum[1]:])
-            lc = np.argmax(tbin)    # 強度最高的 freq lc
+            lc = flc_lim[0] + np.argmax(tbin[flc_lim[0]:])    # 強度最高的 freq lc
+            pk_lvl = tbin[lc]
+
+            isMoreThan2 = len(flc_tmp_list) > 2 # 判斷是否有更能相信的"頻率特徵"
+            isMoreThan1 = len(flc_tmp_list) > 1 # 判斷是否有更能相信的"頻率特徵"
+
             # = 還沒有第一個特徵點 or 與前2個特徵點裡的任一點頻率相近(<=3)
             is_conti_freq = not last_pk_lc or abs(last_pk_lc - lc) <= 3 or (len(flc_tmp_list) > 1 and abs(flc_tmp_list[-2]-lc) <= 3)
+            is_weak_conti_freq = False
+            # tmpMsg = f"{t_stft[i]+t0:.3f}({i})sec:\n"
+            # if not is_conti_freq:
+            #     tmpMsg += (f"\tnot is_conti_freq: isMoreThan1?{isMoreThan1}  (ignore this)lc/last_pk_lc={lc/last_pk_lc:.3f} within (1.8,2.2)?\n")
+            # === 確認是否能接續 last_pk_lc
+            # 已經連續4個了 或 高度基本要求(pk_lvl_LL)
+            # 與 last_pk_lvl 或 pk_lvl 相差不大
+            isPkChanged = False     # 影響後續 prominent 的判斷門檻是否要放寬
+            if not is_conti_freq and isMoreThan1:# or 1.8 < lc/last_pk_lc < 2.2):
+                lci = max(0, last_pk_lc-3)
+                lcf = min(tbin.size, last_pk_lc+4)
+                lc2 = lci + np.argmax(tbin[lci:lcf])  # 考慮會特徵頻率會飄移，所以找附近的最高點
+                pk2_lvl = tbin[lc2]
+                # tmpMsg += (f"\t\tcheck pk near last_pk: pk:{f_stft[lc2]}(lc2={lc2} > {flc_lim[0]}?)Hz  "
+                #            f"lvl={pk2_lvl:.3f} > {pk_lvl_LL}?  "
+                #            f"> last_pk_lvl - 0.15={last_pk_lvl - 0.15:.3f}?  "
+                #            f"> pk_lvl - 0.15={pk_lvl - 0.15:.3f}?\n")
+                if lc2 >= flc_lim[0] and pk2_lvl > 0.4 and (len(flc_tmp_list) > 3 or pk2_lvl > pk_lvl_LL):
+                    is_weak_conti_freq = True
+                    if (pk2_lvl > last_pk_lvl - 0.15 or pk2_lvl > pk_lvl - 0.15):
+                        lc = lc2
+                        pk_lvl = pk2_lvl
+                        is_conti_freq = True
+                        isPkChanged = True
+                        # tmpMsg += (f"\t\t\tselect last_pk as this pk!\n")
+
             if lc <= flc_lim[2]:    # 70Hz
                 isVeryLowfreq = True    # 判斷是否考慮有些特別的規則
                 veryLowFreqCnt += 1
-            isMoreThan2 = len(flc_tmp_list) > 2 # 判斷是否有更能相信的"頻率特徵"
-            pk_lvl = tbin[lc]
-            c1 = flc_lim[0] <= lc < flc_lim[1]     # 30 <= 特徵頻率 < 400Hz
+            
+            c1 = lc < flc_lim[1]     # 35 <= 特徵頻率 < 400Hz
             # === 在低頻區有某個頻率特別明顯的可能性較高
             # = pk_lvl門檻：高頻區(>800Hz)不同強度，pk_lvl有不同的門檻 (之前嘗試過用比例，但是可能因為band3的涵蓋範圍較廣，且取log，所以不太合適)
-            c2 = (band3 <= 10 and pk_lvl > 0.6) or (band3 < 21 and pk_lvl > 1.2)
-            # # = 密度篩選：pk高時也允許比較高的密度(也許做該頻段的median去背景也是一個選擇，但這牽涉到變更比較大)
-            c2 = c2 and (dens1 < dens_th[2] or (dens1 < dens_th[0] and pk_lvl > 0.9) or (dens1 < dens_th[1] and pk_lvl > 1.2) or pk_lvl > 1.4)
-            self.aMsg(f"{t_stft[i]+t0:.3f}({i})sec pk:{f_stft[lc]}({lc})Hz height={pk_lvl:.2f}   "
-                        f"last_pk lc={last_pk_lc}={f_stft[last_pk_lc]:.1f}Hz lvl={last_pk_lvl:.2f} "
-                        f"is_conti_freq={is_conti_freq}  len(flc_tmp_list)={len(flc_tmp_list)}  "
-                        f"self.isLowBand={self.isLowBand}  lowBandCnt={lowBandCnt}  isVeryLowfreq={isVeryLowfreq}  veryLowFreqCnt={veryLowFreqCnt}\n"
-                        f"\tband1={band1:.2f}(dens1={dens1}<{dens_th}?)  band3={band3:.2f}  c2={c2}")
+            c2 = (band3 <= 12 and pk_lvl > pk_lvl_LL) or (band3 < 21 and pk_lvl > 1.2) or (is_conti_freq and isMoreThan2)
+            # = 密度篩選：密度太高表示很亂，pk高時也允許比較高的密度(也許做該頻段的median去背景也是一個選擇，但這牽涉到變更比較大)
+            c2 = c2 and (dens1 < dens_th[2] or (dens1 < dens_th[0] and pk_lvl > 0.7) or (dens1 < dens_th[1] and pk_lvl > 1.2) or pk_lvl > 1.4)
+            # self.aMsg(f"{tmpMsg}"
+            #           f"\tpk:{f_stft[lc]}({lc})Hz height={pk_lvl:.3f}   "
+            #           f"last_pk lc={last_pk_lc}={f_stft[last_pk_lc]:.1f}Hz lvl={last_pk_lvl:.3f} "
+            #           f"is_conti_freq={is_conti_freq}  len(flc_tmp_list)={len(flc_tmp_list)}  "
+            #           f"self.isLowBand={self.isLowBand}  lowBandCnt={lowBandCnt}  strongLowBandCnt={strongLowBandCnt}  "
+            #           f"isVeryLowfreq={isVeryLowfreq}  veryLowFreqCnt={veryLowFreqCnt}\n"
+            #           f"\tdens1={dens1}<{dens_th}?  band3={band3:.2f}  c2={c2}")
 
             # ===== 是否有連續窄頻(某freqency bin特別突出)
             c3 = False
             # = 頻率在偵測範圍, 強度夠突出, 不是低頻帶類, (與上一個最強頻率相近(連續) or 連續累積小於2個)
             if c1 and c2 and not self.isLowBand and (is_conti_freq or len(flc_tmp_list)<2):
                 # == 窄頻
-                valy_th = [pk_lvl*.5, pk_lvl*.25, pk_lvl*.3]
+                valy_th = [pk_lvl*.55, pk_lvl*.3, pk_lvl*.35] if isMoreThan2 else [pk_lvl*.5, pk_lvl*.25, pk_lvl*.3]
                 # = 依據不同高度, 可信度(連續多少個來調整搜尋範圍)
                 # pk_lvl很高(>1.5)(比較容易溢的其他頻率)
                 # 與上一個最強頻率連續, 有連續3個以上, pk_lvl高(>1 or >0.9 if 很低頻(<50Hz,可能是因為fcut在75Hz,50Hz以下的強度被平滑了))
@@ -864,73 +896,84 @@ class Detector():
                     lcf = min(tbin.size, lc+6)
                 mi_L = tbin[lci:lc].min()
                 mi_R = tbin[lc+1:lcf].min()
-                c30 = (mi_L <= valy_th[0] and mi_R <= valy_th[0])   # 兩邊 3格內 < pk*0.5 (窄頻)
-                c3 = c30 and (mi_L <= valy_th[1] or mi_R <= valy_th[1])    # 至少一邊 3格內 < pk*0.25 (窄頻)
-                if c3 and pk_lvl < 0.9:     # 太弱的，周遭要有淨空區
-                    c3 = np.count_nonzero(tbin[lci:lc]<valy_th[1]) >= 2 and np.count_nonzero(tbin[lc+1:lcf]<valy_th[1]) >= 2
-                    msg = f"is nearby clear?{c3}"
+                if tbin[lc-1] > pk_lvl: # 避免心音
+                    c30 = c3 = False
+                    # self.aMsg(f"tbin[lc-1] > pk_lvl: very low band => ignore!",1)
                 else:
-                    msg = ''
-                self.aMsg(f"is prominent?{c3}  both a little sharp?{c30}  {msg}  "
-                            f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/pk_lvl)}",1)
-                if not c3 and c30 and pk_lvl > 1.3:  # 想針對"有個陡降又遇到緩降"，但目前只是簡單的判斷，所以限定高peak
-                    lci = max(0, lc-3)
-                    lcf = min(tbin.size, lc+4)
-                    c3 = (tbin[lci:lc] <= valy_th[2]).any() or (tbin[lc+1:lcf] <= valy_th[2]).any() # 至少一邊 3格內 < pk*0.3 (窄頻)
-                    self.aMsg(f"sharp then smooth?{c3}  "
-                            f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/pk_lvl)}",1)
+                    c30 = isPkChanged or (mi_L <= valy_th[0] and mi_R <= valy_th[0])   # 兩邊 3格內 < pk*0.5 (窄頻)
+                    valy_th_c3 = pk_lvl * 0.69 if isPkChanged else valy_th[1]
+                    c3 = c30 and (mi_L <= valy_th_c3 or mi_R <= valy_th_c3)    # 至少一邊 3格內 < pk*0.25 (窄頻)
+                    # if c3 and pk_lvl < 0.9:     # 太弱的，周遭要有淨空區
+                    #     c3 = np.count_nonzero(tbin[lci:lc]<valy_th[1]) >= 2 and np.count_nonzero(tbin[lc+1:lcf]<valy_th[1]) >= 2
+                    #     msg = f"is nearby clear?{c3}"
+                    # else:
+                    #     msg = ''
+                    # self.aMsg(f"is prominent?{c3}  both a little sharp?{c30}  "
+                    #         f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/pk_lvl)}  "
+                    #         f"mi_L={mi_L:.3f}<={valy_th[1]:.3f}?  mi_R={mi_R:.3f}<={valy_th[1]:.3f}",1)
+                    if not c3 and c30 and pk_lvl > 1.3:  # 想針對"有個陡降又遇到緩降"，但目前只是簡單的判斷，所以限定高peak
+                        lci = max(0, lc-3)
+                        lcf = min(tbin.size, lc+4)
+                        c3 = (tbin[lci:lc] <= valy_th[2]).any() or (tbin[lc+1:lcf] <= valy_th[2]).any() # 至少一邊 3格內 < pk*0.3 (窄頻)
+                        # self.aMsg(f"sharp then smooth?{c3}  "
+                        #         f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/pk_lvl)}",1)
             
-            # === 非低頻帶的狀態, 頻率不連續(可能是最強的頻率超出上限(摩擦音、腸音)、或不突出)
-            # === 但 有基本強度(> 0.9), 已經連續2個以上的特徵點, 還有機會利用last_pk, 再進行比較寬鬆的窄頻偵測
-            c30 = not c3 and pk_lvl > 0.9 and not is_conti_freq and len(flc_tmp_list) > 1 and last_pk_lc
-            if c30:
-                lci = max(0, last_pk_lc-3)
-                lcf = min(tbin.size, last_pk_lc+4)
-                lc2 = lci + np.argmax(tbin[lci:lcf])  # 考慮會特徵頻率會飄移，所以找附近的最高點
-                isVeryLowfreq2 = lc2 <= flc_lim[2]   # 70Hz  # 判斷是否考慮有些特別的規則
-                pk2_lvl = tbin[lc2]
-                c30 = flc_lim[0] <= lc2 < flc_lim[1] and pk2_lvl >= last_pk_lvl*0.68   # lc2仍要滿足頻率偵測範圍
-                if c30 and not self.isLowBand:
-                    # = 依據不同高度, 可信度(連續多少個來調整搜尋範圍)
-                    if isMoreThan2 and (pk2_lvl > 1 or (isVeryLowfreq2 and pk2_lvl > 0.9)):  # 已經有連續3個, pk_lvl高(>1), 可以放寬更多搜尋範圍
-                        lci = max(0, lc2-6)
-                        lcf = min(tbin.size, lc2+7)
-                    elif not isMoreThan2 and pk2_lvl < 0.8:  # 還沒有連續3個, pk_lvl不夠高(<0.8)
-                        lci = max(0, lc2-3)
-                        lcf = min(tbin.size, lc2+4)
-                    elif not isMoreThan2 and pk2_lvl < 1:  # 還沒有連續3個, pk_lvl略高(0.8~1)
-                        lci = max(0, lc2-3)
-                        lcf = min(tbin.size, lc2+5)
-                    else:   # 還沒有連續3個, pk_lvl高(>=1)  或  已經連續3個, pk_lvl不很高(<= 1)
-                        lci = max(0, lc2-5)
-                        lcf = min(tbin.size, lc2+6)
-                    valy_th = pk2_lvl*.69
-                    mi_L = tbin[lci:lc2].min()
-                    mi_R = tbin[lc2+1:lcf].min()
-                    c3 = (mi_L <= valy_th and mi_R <= valy_th)    # 窄頻
-                else:
-                    c30 = False
-                if c3 and not c1:   # 是窄頻且原來超出400Hz --> 更新lc
-                    lc = lc2
-                    pk_lvl = pk2_lvl
-                self.aMsg(f"by last_pk_lc: c30={c30} lc={lc} lc2={lc2} similar height?ratio={pk2_lvl/last_pk_lvl:.2f} > 0.68?  "
-                            f"conti and prominent?{c3}  "
-                            f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/pk2_lvl)}  lci,lcf={lci},{lcf}",1)
-            else:
-                msg = f"not by last_pk_lc: c30={c30}  c3={c3}  pk_lvl={pk_lvl:.2f}  last_pk_lc={last_pk_lc}  "
-                if last_pk_lc:
-                    msg += f"{self.formatMsg(tbin[max(0, last_pk_lc-3):min(tbin.size, last_pk_lc+4)]/last_pk_lvl)}"
-                self.aMsg(msg,1)
+            # # === 非低頻帶的狀態, 頻率不連續(可能是最強的頻率超出上限(摩擦音、腸音)、或不突出) => 在前面就已經先 讓last_pk優先了, 所以這段整併到前面
+            # # === 但 有基本強度(> pk_lvl_LL), 已經連續1個以上的特徵點, 還有機會利用last_pk, 再進行比較寬鬆的窄頻偵測
+            # c30 = not c3 and pk_lvl > pk_lvl_LL and not is_conti_freq and len(flc_tmp_list) > 0 and last_pk_lc
+            # if c30:
+            #     lci = max(0, last_pk_lc-3)
+            #     lcf = min(tbin.size, last_pk_lc+4)
+            #     lc2 = lci + np.argmax(tbin[lci:lcf])  # 考慮會特徵頻率會飄移，所以找附近的最高點
+            #     isVeryLowfreq2 = lc2 <= flc_lim[2]   # 70Hz  # 判斷是否考慮有些特別的規則
+            #     pk2_lvl = tbin[lc2]
+            #     c30 = flc_lim[0] <= lc2 < flc_lim[1] and pk2_lvl >= last_pk_lvl*0.68   # lc2仍要滿足頻率偵測範圍
+            #     if c30 and not self.isLowBand:
+            #         # = 依據不同高度, 可信度(連續多少個來調整搜尋範圍)
+            #         if isMoreThan2 and (pk2_lvl > 1 or (isVeryLowfreq2 and pk2_lvl > 0.9)):  # 已經有連續3個, pk_lvl高(>1), 可以放寬更多搜尋範圍
+            #             lci = max(0, lc2-6)
+            #             lcf = min(tbin.size, lc2+7)
+            #         elif not isMoreThan2 and pk2_lvl < 0.8:  # 還沒有連續3個, pk_lvl不夠高(<0.8)
+            #             lci = max(0, lc2-3)
+            #             lcf = min(tbin.size, lc2+4)
+            #         elif not isMoreThan2 and pk2_lvl < 1:  # 還沒有連續3個, pk_lvl略高(0.8~1)
+            #             lci = max(0, lc2-3)
+            #             lcf = min(tbin.size, lc2+5)
+            #         else:   # 還沒有連續3個, pk_lvl高(>=1)  或  已經連續3個, pk_lvl不很高(<= 1)
+            #             lci = max(0, lc2-5)
+            #             lcf = min(tbin.size, lc2+6)
+            #         valy_th = pk2_lvl*.69
+            #         mi_L = tbin[lci:lc2].min()
+            #         mi_R = tbin[lc2+1:lcf].min()
+            #         c3 = (mi_L <= valy_th and mi_R <= valy_th)    # 窄頻
+            #     else:
+            #         c30 = False
+            #     if c3 and not c1:   # 從last_pk找出來的(lc2)是窄頻 且 現在最高點超出400Hz --> 更新lc為lc2
+            #         self.aMsg(f"c3?{c3} not c1?{not c1} => update lc and pk_lvl to those near last_pk",1)
+            #         lc = lc2
+            #         pk_lvl = pk2_lvl
+            #     is_conti_freq = is_conti_freq or c3
+            #     self.aMsg(f"by last_pk_lc: c30={c30} lc={lc} lc2={lc2} similar height?ratio={pk2_lvl/last_pk_lvl:.2f} > 0.68?  "
+            #                 f"conti and prominent?{c3}  "
+            #                 f"nearby_lvl_ratio={self.formatMsg(tbin[lci:lcf]/max(1e-9,pk2_lvl))}  lci,lcf={lci},{lcf}",1)
+            # else:
+            #     msg = f"not by last_pk_lc: c30={c30}  c3={c3}  pk_lvl={pk_lvl:.2f}  last_pk_lc={last_pk_lc}  "
+            #     if last_pk_lc:
+            #         msg += f"{self.formatMsg(tbin[max(0, last_pk_lc-3):min(tbin.size, last_pk_lc+4)]/last_pk_lvl)}"
+            #     self.aMsg(msg,1)
+
             # 有找到窄頻, 但頻率不連續 且 還未累積到3個連續特徵點, last_pk_lvl存在且較弱 --> reset
             if c3 and not is_conti_freq and not isMoreThan2 and 0 < last_pk_lvl < 0.9:
                 (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
 
-                self.aMsg(f"not conti_freq and weak last_pk_lvl={last_pk_lvl:.2f} --> reset",1)
+                # self.aMsg(f"not conti_freq and weak last_pk_lvl={last_pk_lvl:.2f} --> reset",1)
 
             c31 = True
-            if c3 and pk_lvl <= 1 and lc > flc_lim[5]:  # 連續窄頻, 強度不很強(<=1), 頻率高於100Hz
-                hamo_th = pk_lvl*0.33    # 判斷是否有harmonic的 peak 高度門檻
+            # == 試著排除環境中的說話(harmonic)
+            if self.isHighPk != 2 and c3 and pk_lvl <= 1 and lc > flc_lim[5]:  # 連續窄頻, 強度不很強(<=1), 頻率高於100Hz
+                hamo_th = max(0.4,pk_lvl*0.355)    # 判斷是否有harmonic的 peak 高度門檻
                 n = 2
                 smooth_pk_th = pk_lvl*0.85 # 避免f resolution不足造成pk lc不準，多檢查一個hlc2
                 lc2 = 0
@@ -951,31 +994,46 @@ class Detector():
                     polar = -1
                     hlci = hlci + polar*n
                 hCnt = 0
-                self.aMsg(f"check if there are harmonic tones   polar={polar}",1)
-                while c31 and n < 5:    # 最高檢查到4x，避免誤判
-                    c41 = (tbin[hlci:hlcf] <= hamo_th).all()  # 預估倍頻處 夠弱 且 非倍頻
-                    self.aMsg(f"{n}x tone({f_stft[hlci:hlcf]}Hz) height={self.formatMsg(tbin[hlci:hlcf],'f2')}="
-                            f"{self.formatMsg(tbin[hlci:hlcf]/pk_lvl,'f2')}X  "
-                            f"<= {hamo_th/pk_lvl:.3f}?{c41}",2)
+                # self.aMsg(f"check if there are harmonic tones   polar={polar}",1)
+                last_pk_hamo_lc = -1
+                overCnt = -1
+                while c31 and n < 5 and not overCnt:    # 最高檢查到4x，避免誤判
+                    overCnt = np.count_nonzero(tbin[hlci:hlcf] > hamo_th)
+                    c41 = False
+                    if overCnt == 0:  # 預估倍頻處 ==0: 不夠強
+                        c41 = True
+                        last_pk_hamo_lc = -1
+                    elif overCnt > 2:  #  > 2:極可能是一段寬頻(可能是其他聲音干擾) => 當作不是倍頻
+                        tmplc = np.argmax(tbin[hlci:hlcf])
+                        if last_pk_hamo_lc < 0 or (last_pk_hamo_lc > 0 and abs(tmplc-last_pk_hamo_lc) < 3): # 還要pk頻率是連續的
+                            c41 = True
+                        last_pk_hamo_lc = tmplc
+
+                    # tmpMsg = (f"{n}x tone({f_stft[hlci:hlcf]}Hz) height={self.formatMsg(tbin[hlci:hlcf],'f2')}="
+                    #         f"{self.formatMsg(tbin[hlci:hlcf]/pk_lvl,'f2')}X  "
+                    #         f"<= {hamo_th/pk_lvl:.3f}?{c41}  overCnt={overCnt}  last_pk_hamo_lc={last_pk_hamo_lc}  ")
                     n += 1
                     hlci = lc*n - 1 if polar >= 0 else lc*n + polar*n
                     hlcf = lc*n + 2 if polar < 0 else lc*n + polar*n + 1
                     hCnt += 1 if not c41 else 0
                     c3 = c31 = hCnt < 2
-            if c3 and lowBandCnt < len(flc_tmp_list)/2 :    # lowBandCnt佔不到時間長度一半 但偵測到連續窄頻, 就清除lowBandCnt
+                    # self.aMsg(f"{tmpMsg}hCnt={hCnt}",2)
+            # self.aMsg(f"continuous and not harmonic?{c3}  lowBandCnt({lowBandCnt}) < {len(flc_tmp_list)/2}?",1)
+            if c3 and lowBandCnt < len(flc_tmp_list)/2 :    # lowBandCnt佔不到時間長度一半 但偵測到連續窄頻且非明顯harmonic, 就清除lowBandCnt
                 self.isLowBand = False
                 isStrongLowBand = False
                 strongLowBandCnt = 0
                 lowBandCnt = 0
+                # self.aMsg(f"reset isLowBand / isStrongLowBand / strongLowBandCnt / lowBandCnt",2)
 
             c5 = False
-            # = 非連續窄頻, 最強頻率 < 450Hz
-            c50 = not c3 and lc < flc_lim[3]
+            # === 非連續窄頻 或 已經有lowBandCnt and strongLowBandCnt, 最強頻率 < 450Hz
+            c50 = (not c3 or (lowBandCnt and strongLowBandCnt)) and lc < flc_lim[3]
             # # = pk_lvl夠高(>=0.9), 且 (只有2個以下連續特徵點(還不很確定) 或 有連續頻率)
             # c51 = c50 and pk_lvl >= 0.9 and (not isMoreThan2 or is_conti_freq or abs(last_pk_lc - lc) <= 5)
             # # = 適用於最強頻率切換時，考慮last_pk_lc是否有夠高(c30=有基本強度(>0.8), 已連續2個以上的特徵點, 與last_pk_lvl差不多高(>=0.68X)) 
             # c52 = not c51 and c50 and c30
-            self.aMsg(f"go to low band detection?  c50={c50}",1)
+            # self.aMsg(f"go to low band detection?  c50={c50}",1)
             if c50:
                 # === 找頻帶範圍
                 band_range = []
@@ -983,12 +1041,12 @@ class Detector():
                 band_width = 0
                 band_sum = 0
                 for idx,lvl in enumerate(tbin):
-                    if lvl > 0.45 and thcnt < 3:    # 還沒有起點, 強度超過門檻(0.45), cnt還沒到上限(3)
+                    if lvl > 0.38 and thcnt < 3:    # 還沒有起點, 強度超過門檻(0.45), cnt還沒到上限(3)
                         thcnt += 1
                         if not len(band_range) and thcnt == 3:  # 還沒有起點 
                             band_range.append(idx-2)
                             band_sum += lvl
-                    elif lvl <= 0.4 and thcnt > 0:    # 強度低過門檻(0.45), cnt還沒到0
+                    elif lvl <= 0.38 and thcnt > 0:    # 強度低過門檻(0.4), cnt還沒到0
                         thcnt -= 1
                         if len(band_range) and not thcnt:   # 有起點了, 歸零了, 頻帶結束
                             band_range.append(idx-2)
@@ -997,19 +1055,19 @@ class Detector():
                             break
                     if len(band_range):
                         band_sum += lvl
-                if band_range:
-                    msg = (f"band_width={band_width*fstep:.1f}Hz={band_width} within {band_width_lim}?  "
-                            f"band_range={band_range}={f_stft[band_range]}Hz < {flc_lim[4]}({f_lim[4]})  "
-                            f"avg_lvl={band_sum/len(band_range):.1f}")
-                else:
-                    msg = ''
+                # if band_range:
+                #     msg = (f"band_width={band_width*fstep:.1f}Hz={band_width} within {band_width_lim}?  "
+                #             f"band_range={band_range}={f_stft[band_range]}Hz < {flc_lim[4]}({f_lim[4]})  "
+                #             f"avg_lvl={band_sum/len(band_range):.1f}")
+                # else:
+                #     msg = ''
                 # === 200 <= band_width_Hz <= 650,  < 850Hz
                 c5 = len(band_range) and band_width_lim[0] <= band_width <= band_width_lim[1] and band_range[1] < flc_lim[4]
                 strongLowBandCnt += 1 if c5 and band_sum/len(band_range) > 1 else 0
                 lowBandCnt += 1 if c5 else 0
                 self.isLowBand = lowBandCnt > 2
-                self.aMsg(f"c5={c5}  isLowBand={self.isLowBand}  lowBandCnt={lowBandCnt}  strongLowBandCnt={strongLowBandCnt}  "
-                        f"band_range={self.formatMsg(f_stft[band_range],'f1')}Hz  {msg}",1)
+                # self.aMsg(f"c5={c5}  isLowBand={self.isLowBand}  lowBandCnt={lowBandCnt}  strongLowBandCnt={strongLowBandCnt}  "
+                #         f"band_range={self.formatMsg(f_stft[band_range],'f1')}Hz  {msg}",1)
                 # self.aMsg(f"strong lowband?{c5}(c530={c530}  c531={c531}  c532={c532}  c534={c534})  "
                 #         f"self.isLowBand={self.isLowBand}  lowBandCnt={lowBandCnt}  strongLowBandCnt={strongLowBandCnt} "
                 #         f"band1={band1:.2f}  band2={band2:.2f}  band3={band3:.2f}  "
@@ -1039,6 +1097,10 @@ class Detector():
                 #         f"dens1_{dens1} >= {dens_th}?",1)
                             
             if (c3 or c5):    # 有意義的特徵點
+                if breakCnt and tlc_tmp_list[-1] and tlc_tmp_list[-1] != i-1:
+                    tlc_tmp_list.append(i-1)
+                    flc_tmp_list.append(last_pk_lc)
+
                 tlc_tmp_list.append(i)
                 flc_tmp_list.append(lc)
                 last_pk_lc = lc
@@ -1053,60 +1115,70 @@ class Detector():
                     self.isHighPk = 0
                 isContiVeryLowFreq = isMoreThan2 and veryLowFreqCnt >= len(flc_tmp_list)/2
                 isStrongLowBand = isMoreThan2 and strongLowBandCnt >= len(flc_tmp_list)/2
-                self.aMsg(f"append to tmp_list(len={len(flc_tmp_list)}) and update last_pk, isHighPk={self.isHighPk}  "
-                            f"isContiVeryLowFreq={isContiVeryLowFreq}(veryLowFreqCnt={veryLowFreqCnt})  "
-                            f"isStrongLowBand={isStrongLowBand}(strongLowBandCnt={strongLowBandCnt})",1)
+                # self.aMsg(f"append to tmp_list(len={len(flc_tmp_list)}) and update last_pk, isHighPk={self.isHighPk}  "
+                #             f"isContiVeryLowFreq={isContiVeryLowFreq}(veryLowFreqCnt={veryLowFreqCnt})  "
+                #             f"isStrongLowBand={isStrongLowBand}(strongLowBandCnt={strongLowBandCnt})",1)
             # === 特徵沒有連續出現了
-            elif len(tlc_tmp_list) > 6 and not self.isHighPk and not self.isLowBand:  # 弱窄頻(pk_lvl_avg<=0.9), 要連續7個以上, 如果是極低頻(<70Hz)站了一半以上, 要連續8個
-                if (isContiVeryLowFreq and len(tlc_tmp_list) > 7) or not isContiVeryLowFreq :
-                    tlc_list.extend(tlc_tmp_list)
-                    flc_list.extend(flc_tmp_list)
-
-                (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
-
-                self.aMsg(f"found week narrow band and reset last_pk and isHighPk",1)
-            elif len(tlc_tmp_list) > 5 and self.isHighPk == 1 and not self.isLowBand:  # 微強窄頻(0.9<pk_lvl_avg<=1), 要連續6個以上; 如果是極低頻(<70Hz)站了一半以上, 要連續7個
+            elif len(tlc_tmp_list) > 5 and not self.isHighPk and not self.isLowBand:  # 弱窄頻(pk_lvl_avg<=0.9), 要連續7個以上, 如果是極低頻(<70Hz)站了一半以上, 要連續8個
                 if (isContiVeryLowFreq and len(tlc_tmp_list) > 6) or not isContiVeryLowFreq :
                     tlc_list.extend(tlc_tmp_list)
                     flc_list.extend(flc_tmp_list)
 
                 (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
 
-                self.aMsg(f"found a little strong narrow band and reset last_pk and isHighPk",1)
-            elif len(tlc_tmp_list) > 3 and self.isHighPk == 2 and not self.isLowBand:  # 強窄頻(pk_lvl_avg>1), 要連續4個以上; 如果是極低頻(<70Hz)站了一半以上, 要連續6個
+                # self.aMsg(f"found week narrow band and reset last_pk and isHighPk",1)
+            elif len(tlc_tmp_list) > 4 and self.isHighPk == 1 and not self.isLowBand:  # 微強窄頻(0.9<pk_lvl_avg<=1), 要連續6個以上; 如果是極低頻(<70Hz)站了一半以上, 要連續7個
                 if (isContiVeryLowFreq and len(tlc_tmp_list) > 5) or not isContiVeryLowFreq :
                     tlc_list.extend(tlc_tmp_list)
                     flc_list.extend(flc_tmp_list)
 
                 (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
 
-                self.aMsg(f"found strong narrow band and reset last_pk and isHighPk",1)
+                # self.aMsg(f"found a little strong narrow band and reset last_pk and isHighPk",1)
+            elif len(tlc_tmp_list) > 3 and self.isHighPk == 2 and not self.isLowBand:  # 強窄頻(pk_lvl_avg>1), 要連續4個以上; 如果是極低頻(<70Hz)站了一半以上, 要連續6個
+                if (isContiVeryLowFreq and len(tlc_tmp_list) > 4) or not isContiVeryLowFreq :
+                    tlc_list.extend(tlc_tmp_list)
+                    flc_list.extend(flc_tmp_list)
+
+                (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
+
+                # self.aMsg(f"found strong narrow band and reset last_pk and isHighPk",1)
             elif len(tlc_tmp_list) > 3 and self.isLowBand:  # 強低頻帶, 要連續4個以上; 弱低頻帶, 要連續5個以上
                 if isStrongLowBand or (not isStrongLowBand and len(flc_tmp_list) > 4):
                     tlc_list.extend(tlc_tmp_list)
                     flc_list.extend(flc_tmp_list)
 
                 (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
                 
-                self.aMsg(f"found strong low-freq band and reset last_pk, isHighPk and isStrongLowBand",1)
+                # self.aMsg(f"found strong low-freq band and reset last_pk, isHighPk and isStrongLowBand",1)
+            elif (is_weak_conti_freq or is_conti_freq) and isMoreThan2 and breakCnt < 2:
+                breakCnt += 1
+                # self.aMsg(f"not found obstruction sound but is_conti_freq({is_weak_conti_freq},{is_conti_freq}) and isMoreThan2 and breakCnt({breakCnt}) < 2",1)
             else:
                 (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt) = self.reset(closeObsSnd=True)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt) = self.reset(closeObsSnd=True)
 
-                self.aMsg(f"not found obstruction sound and reset last_pk and isHighPk",1)
+                # self.aMsg(f"not found obstruction sound and reset last_pk and isHighPk",1)
 
         if len(tlc_tmp_list):   # 一直延伸到檔案結尾 還沒有結案的
-            c0 = len(tlc_tmp_list) > 6 and not self.isHighPk and not self.isLowBand  # 弱窄頻, 要連續7個以上
+            c0 = len(tlc_tmp_list) >= 5 and not self.isHighPk and not self.isLowBand  # 弱窄頻, 要連續6個以上
             c1 = len(tlc_tmp_list) > 2 and self.isHighPk == 2 and not self.isLowBand  # 強窄頻, 要連續3個以上
             c2 = len(tlc_tmp_list) > 3 and self.isLowBand  # 強低頻帶, 要連續4個以上
-            if c0 or c1 or c2:
+            c3 = len(tlc_tmp_list) >= 4 and self.isHighPk == 1 and not self.isLowBand
+            c4 = len(tlc_tmp_list) >= 3 and self.isHighPk == 2 and not self.isLowBand
+            if c0 or c1 or c2 or c3 or c4:
                 tlc_list.extend(tlc_tmp_list)
                 flc_list.extend(flc_tmp_list)
-            self.aMsg(f"till end: {c0} {c1} {c2}")
+            # self.aMsg(f"till end: {c0} {c1} {c2} {c3} {c4}")
 
         #return f_stft,t_stft,zxx,tlc_list,flc_list    # for debug plt
         return len(flc_list)>0    # for AWS, 0: no obstruction sound;  >1: found obstruction sound
