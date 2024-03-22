@@ -37,7 +37,7 @@ def chk_alg():
     ba=bio.read()
     
     print('OSAA OBS chk01')
-    has_poo,has_obs=OSAA.checkRaw(ba)
+    has_poo,has_obs=OSAA.checkRaw(ba,'test',0)
     print('OSAA OBS chk02',has_poo,has_obs)
     
     obs_proc=OA.ObsAlarm('test_aaa')
@@ -69,7 +69,7 @@ def odd_snd_proc(cur,conn,cognito_id,param):
     #ba_len=len(ba)
     #item_cnt=ba_len//2;
     #data_set=struct.unpack('<'+'h' * item_cnt,ba)
-    has_poo,has_obs=OSAA.checkRaw(ba)
+    has_poo,has_obs=OSAA.checkRaw(ba,dev_udid,tick/32768)
     obs_proc=OA.ObsAlarm(dev_udid)
     req_obs_alarm=obs_proc.addData(dev_udid,esp_ts/1000.0,has_obs)
     

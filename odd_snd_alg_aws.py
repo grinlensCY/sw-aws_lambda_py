@@ -5,38 +5,62 @@ import time,threading
 import queue
 import numpy as np  
 from os import SEEK_SET, SEEK_CUR, SEEK_END
+import cache_util as CU
 
 class Detector():
-    def __init__(self, micsr=4000, config=None, filterSet=None, tsHz=32768, istsec=True, pkgnum=4, pkglen=64, len_UL=12000, t0=0, ver=20230125):
-        self.micsr = micsr
-        self.fwts_target = 0.016*tsHz
-        self.fwts_th = self.fwts_target/2
-        self.toffset = t0   # for debug
+    def __init__(self, udid, t0, micsr=4000, pkglen=64, pkgnum=4, tsHz=32768, istsec=True, len_UL=12000, ver=20240319.0):
+        # ver: 小數點 代表是不影響演算法的小改版
+        # 導入AWS時，要修改 註解裡有AWS(大寫) 與 移除debug的段落!
+        # 2024018 review:因為目前obs的判斷沒有stream的概念，而是每三秒(~2.936sec)的spectrogram獨立去判斷(因為之前只限定不連續的三秒資料)
+        self.udid = udid
+        #self.varfn = f"odd_{udid}.json"
+        self.varkey = f"odd_det_{udid}_key"
+
+        self.toffset = t0   # 用來判斷是否為連續數據
+        
         self.istsec = istsec
         self.tsHz = tsHz if not istsec else 1
-        self.pkgnum = pkgnum
+        
         self.len_UL = len_UL    # debug: 有時候aws上有明顯不滿3秒的資料，需要透過這個來結束poo偵測, 
-        if filterSet is None:
-            filterSet = {
-                "typ": "high",
-                "fcut": [75],
-                "isfiltfilt": 0,
-                "noZi": 0,
-                "resetZi": 0
+
+        filterSet = {
+            "typ": "high",
+            "fcut": [75],
+            "isfiltfilt": 0,
+            "noZi": 0,
+            "resetZi": 0
             }
-        if 'isfiltfilt' not in filterSet:
-            filterSet['isfiltfilt'] = 0
-        if 'noZi' not in filterSet:
-            filterSet['noZi'] = 0
-        if 'resetZi' not in filterSet:
-            filterSet['resetZi'] = 0
         self.msg = ''
-        self.loadConfig(config)
-        self.update_sr(micsr,filterSet,pkglen)
+        self.loadConfig()
+        self.update_sr(micsr,filterSet,pkglen,pkgnum)
+
+        self.load_context()
+        self.reset(True,False)  # for debug
+        
         self.ver = ver
         #print(f'\ndetect oddsnd ver.{ver}  toffset={self.toffset}')
 
     
+    def formatMsg(self,msg,typ='f3'):
+        ''' only for debug'''
+        if msg is None:
+            return msg
+        msg = np.array(msg)
+        if typ[0] == 'f':
+            return np.around(msg,int(typ[1])).tolist()
+        elif typ[0] == 'e':
+            str_list = []
+            for i in msg:
+                str_list.append(f"{np.format_float_scientific(i,int(typ[1]))}")
+            return str_list
+    
+    def aMsg(self,msg,pre=0,post=0):
+        for i in range(pre):
+            self.msg += '\t'
+        for i in range(post):
+            msg += '\t'
+        self.msg += msg+'\n'
+
     def bwfilter(self, data_in=None, sr=None, f_cut=None, N_filt=3, filtype='bandpass',
                     b_filt=None, a_filt=None, isfiltfilt=False, forback=False, iszi=True, zf=None):
         """apply butterworth filter with zero phase shift"""
@@ -82,58 +106,36 @@ class Detector():
                 zi = signal.lfilter_zi(b_filt, a_filt)
                 data_filtered,next_zi = signal.lfilter(b_filt, a_filt, data_in, zi=zi*data_in[0])
         return data_filtered, b_filt, a_filt, next_zi
-    
-    def loadConfig(self,config):
-        if config is not None:
-            # self.th_nonpk_percentile = config['th_nonpk_percentile']
-            # self.th_PK_SNR = config['th_PK_SNR']
-            # self.minInterval_pairingPk = config['minInterval_pairingPk']
-            # # self.fcut = config['fcut']
-            # self.th_lowVol = config['th_lowVol']
-            # self.minInterval_pickingPk = config['minInterval_pickingPk']
-            self.showMsg = config['showMsg']
-            # self.maxInterval_mergingPk = config['maxInterval_mergingPk']
-            self.update_sr_parameters()
-        else:
-            self.showMsg = 0
-            # # quiet spike-like bowel sound
-            self.main_lvl_UL = 9e-1    # for debug
-            # self.main_1800hp_lvl_UL = 4e-2
-            self.main_lvl_LL = 2.6e-1
-            # self.main_class0_slope_th = 2.0e-2*4000 #4000sps:2.5e-4*4000
-            self.main_class1_slope_th = 4e-2*4000   #4000sps:9e-4*4000
-            # self.weight_10 = self.main_class1_slope_th/self.main_class0_slope_th-1  # 計算密度時所加上去的class1權重
-            self.main_class2_slope_th = 2.2e-1/2*4000   #0.9e-1/2*4000   #2.4e-1/2*4000 #4000sps:4e-3/2*4000
-            self.main_class3_slope_th = 3.9e-1*4000 # for sharp turn detection   4000sps:5.5e-3*4000
-            self.main_class4_slope_th = 5.5e-1*4000
-            self.max_nonclass0_interval_sec = 8/4000 # 波包裡, 最大的空格點距離 0.002sec
-            # self.min_grp_duration_sec = 0.00125 # 波包最小寬度
-            self.max_grp_duration_sec = 0.013 # 波包最大寬度
-            self.calc_reflvl_len_sec = 0.013    # 用來計算ref_lvl的最長範圍
-            self.calc_reflvl_halflen_sec = self.calc_reflvl_len_sec/2   # 取出seg最後一小段的max，避免下一seg的第一個需要計算ref_lvl時，資訊量不足
-            self.snr = 3.5    # ref_lvl 是 max的幾倍
-            self.grp_intvl_th_sec = 0.007 # 波包的淨空距離，也用於 計算該idx_gaps點的lvl
-            self.mx_marked_density_th = 0.4  # 有標記出的點佔波包多少比例
-            self.high_mx_marked_density_th = 1.2  # 有標記出的點佔波包多少比例
-            self.clear_period_sec = 0.007    # 用來清除太靠近的點
+        
+    def loadConfig(self,):
+        # # quiet spike-like bowel sound
+        self.main_lvl_UL = 9e-1    # for debug
+        self.main_lvl_LL = 2.6e-1
+        # self.main_class0_slope_th = 2.0e-2*4000 #4000sps:2.5e-4*4000
+        self.main_class1_slope_th = 4e-2*4000   #4000sps:9e-4*4000
+        self.main_class2_slope_th = 2.2e-1/2*4000   #0.9e-1/2*4000   #2.4e-1/2*4000 #4000sps:4e-3/2*4000
+        self.main_class3_slope_th = 3.9e-1*4000 # for sharp turn detection   4000sps:5.5e-3*4000
+        self.main_class4_slope_th = 5.5e-1*4000
+        self.max_nonclass0_interval_sec = 8/4000 # 波包裡, 最大的空格點距離 0.002sec
+        # self.min_grp_duration_sec = 0.00125 # 波包最小寬度
+        self.max_grp_duration_sec = 0.013 # 波包最大寬度
+        self.calc_reflvl_len_sec = 0.013    # 用來計算ref_lvl的最長範圍
+        self.calc_reflvl_halflen_sec = self.calc_reflvl_len_sec/2   # 取出seg最後一小段的max，避免下一seg的第一個需要計算ref_lvl時，資訊量不足(用於計算 last_idxs_gap_ref_lvl)
+        self.snr = 3.5    # ref_lvl 是 max的幾倍
+        self.grp_intvl_th_sec = 0.007 # 波包的淨空距離，也用於 計算該idx_gaps點的lvl
+        self.mx_marked_density_th = 0.4  # 有標記出的點佔波包多少比例
+        self.high_mx_marked_density_th = 1.2  # 有標記出的點佔波包多少比例
+        self.clear_period_sec = 0.007    # 用來清除太靠近的點
 
-            # self.min_absndgrp_length = 3    # 0.064*3=0.192sec
-            # self.max_absndgrp_length = 30   # 1.92sec # 0.064*8=1.152sec
-            # self.max_absndgrp_sec = 1.93    # add 0.01 tolerance for 
-            # self.ext_unstable_sec = 0.0064  # unstable, absnd timeslot延伸出去的範圍
-            
-            # 評估最近一段時間內是否為unstable的時間長度, 若unstable比例過高(>self.unstable_ratio_th), 放棄absnd/hamo計算與輸出
-            # self.eval_unstable_period_sec = 3.5
-            # self.unstable_ratio_th = 0.5    # 高於 就是 isUnstablePeriod
+        self.pks_intvl_LL = 0.005
+        self.pks_intvl_UL = 0.08
 
-            self.pks_intvl_LL = 0.005
-            self.pks_intvl_UL = 0.08
+        # 可傳輸3秒資料到station, 剛好設定 self.extremely_unstable_length 40seg = 0.064*40 = 2.56, 也許擷取出來的前後都可以多保留些
+        self.ts_storage_sec = 3
 
-            # 可傳輸3秒資料到station, 剛好設定 self.extremely_unstable_length 40seg = 0.064*40 = 2.56, 也許擷取出來的前後都可以多保留些
-            self.ts_storage_sec = 3
+        self.tdiff_th_sec = 3 + 0.5 # 若與前一個時間戳記相差超過tdiff_th_sec，視為不連續數據
 
     def update_sr_parameters(self):
-        # quiet spike-like bowel sound
         self.max_nonclass0_interval = self.max_nonclass0_interval_sec*self.micsr
         # self.main_class0_step_th = self.main_class0_slope_th/self.micsr
         self.main_class1_step_th = self.main_class1_slope_th/self.micsr
@@ -145,34 +147,7 @@ class Detector():
         self.max_grp_duration = self.max_grp_duration_sec*self.micsr
         self.calc_reflvl_len = int(self.calc_reflvl_len_sec*self.micsr)
         self.calc_reflvl_halflen = int(self.calc_reflvl_halflen_sec*self.micsr)
-        # self.dyna_max_grp_duration = self.max_grp_duration
         self.grp_intvl_th = self.grp_intvl_th_sec*self.micsr
-
-        # # == unstable period evaluation
-        # self.mx_eval_unstable_idx = int(self.eval_unstable_period_sec/self.proc_len_sec)
-        # self.eval_unstable_sum_th = int(self.mx_eval_unstable_idx*self.unstable_ratio_th)
-
-        # == abnormal sound
-        # self.class0Cnt_UL = int(self.proc_len * 0.31) 
-        # self.class1Cnt_UL = int(self.proc_len * 0.11)
-        # self.class2Cnt_UL = int(self.proc_len * 0.04)
-        # self.extremely_unstable_length = int(2.56/self.proc_len_sec) # 2.56sec 若超過這長度 就不計算hamonic 需小於3秒(傳輸長度)
-        # self.min_absndgrp_length_sec = self.min_absndgrp_length*self.proc_len_sec
-        # self.max_absndgrp_length_sec = self.max_absndgrp_length*self.proc_len_sec
-
-    def update_sr(self,sr,filterSet={},pkglen=64):
-        #print('update sr=',sr,'Hz  pkglen=',pkglen)
-        self.micsr = sr
-        self.step_sec = 1/sr
-        self.pkglen = pkglen
-        self.pkglen_sec = pkglen/sr
-        self.proc_len = self.pkgnum*self.pkglen
-        self.proc_len_sec = self.pkgnum*self.pkglen_sec
-        self.same_timeslot_intvl_th_sec = self.proc_len_sec * 1.25
-        self.segEnd_len = min((3 - self.proc_len_sec)*sr, self.len_UL-3)
-        self.update_sr_parameters()
-        self.updatefilter(filterSet)
-        self.reset(True,True)
     
     def updatefilter(self,filterSet):
         if filterSet:
@@ -181,80 +156,54 @@ class Detector():
         _,self.b_bw_hp,self.a_bw_hp,_ = self.bwfilter(sr=self.micsr,f_cut=self.filterSet['fcut'],filtype='highpass')
         self.zi_main = None
 
-    def aMsg(self,msg,pre=0,post=0):
-        for i in range(pre):
-            self.msg += '\t'
-        for i in range(post):
-            msg += '\t'
-        self.msg += msg+'\n'
-
+    def update_sr(self,sr=4000,filterSet={},pkglen=64,pkgnum=4):
+        self.micsr = sr
+        self.step_sec = 1/self.micsr
+        self.pkglen_sec = pkglen/self.micsr
+        self.proc_len = pkgnum*pkglen
+        self.proc_len_sec = pkgnum*self.pkglen_sec
+        self.same_timeslot_intvl_th_sec = self.proc_len_sec * 1.25
+        # self.segEnd_len = min(3*self.micsr//self.proc_len*self.proc_len, self.len_UL-3)
+        self.segEnd_len = min(3*self.micsr - self.proc_len, self.len_UL-3)  # debug
+        print(f"update_sr: sr={self.micsr}  pkglen={pkglen}  self.segEnd_len={self.segEnd_len}={self.segEnd_len/self.micsr:.3f}sec")
+        self.update_sr_parameters()
+        self.updatefilter(filterSet)
+        # self.reset(True,True) # 要取決於是否為時間連續資料
+    
     def reset(self, proc=False, all=False, closegrp=False, closeObsSnd=False):
         if all:
             self.ti = None
+            self.t0 = None
             self.tNow = None
-            # self.accuCnt = 1
             self.idxi_plt = 0 # for debug plt and (aws 3sec data)index of end of data
-            # self.ts_pre = 0
-            # self.idxi = 0   # idx offset of each input segment (maybe deprecated)
 
             # === for stream
             self.lastMainSndData = []
             
             # === findspike
             # = 校正強度門檻
-            # self.isScaling_main = False
-            # self.last3MxSnd_arry = np.array([0])    # 收集過去的背景值
-            # self.last3MxSnd_ref_lvl = 0 # 背景值參考
             self.ref_lvl = None
 
             # === abnormal sound
-            # self.absndGrp_start_sec = None
-            # self.lastAbSndGrp_end_sec = -1
-            # self.lastAbSndGrp_length = 0
-            # self.unstable_start_sec = None
-            # self.unstable_timeslot_list = []
-            # self.lastUnstable_end_sec = -1
-            # self.lastUnstable_length = 0
-            # self.last2_c1_density = []
-            # self.high_c1_density_cnt = 0
-            # self.isStable = True
             self.has_high_c1_density = False    # 若沒有poo  has_high_c1_density也沒有 ==> 才進行呼吸異音與大聲腸鳴偵測
-            # self.eval_unstable_idx = 0
-            # self.eval_unstable_sum = 0
-            # self.eval_unstable_arr = np.zeros(self.mx_eval_unstable_idx, dtype=bool)
-            # self.isUntablePeriod = True
-            # self.last_abSnd_c1lc = []     
                         
             # = poo sound
             self.is_prominent = False   # 特別突出的
             self.is_prominent_cnt = 0
             self.last_idxs_gap_lc_is_prominent = False
-            # self.is_priorP_prominent = False
             self.last_abs_onestep_gap_next = None
             self.last_abs_onestep_gap = None
             self.last_idxs_gap_lc = None
             self.last_idxs_gap_lvl = None   # 用於結合下一段資料再來決定 last_idxs_gap_lc_is_prominent
             self.last_idxs_gap_ref_lvl = None   # 保留到下一段，當下一段的第一個idx_gaps前面的資料點不足，可以加入
-            # self.has_class2 = False
-            # self.is_turned = False
-            # self.has_sharp_turn = False
-            # self.is_over_lvl_UL = False
-            # self.hasEnvNoise = False
             self.grp_start_sec = 0
             self.grp_duration = 0
             self.pre_intvl = 0
             self.cnt_marked = 0
             self.mx_marked_density = 0
-            # self.is_pre_class1 = False
-            # self.harmonic_turns = 0
-            # self.lc_turnP = np.array([],dtype=int)
-            # self.chk_harmonic_lcs = np.array([],dtype=int)
-            # self.grp_pk_lvl = 0
             self.is_priorP_pk = False
             self.poo_ts_list = []
-            self.poo_lc_arr = np.array([],dtype=int)   # debug only 與 self.poo_ts_list 同步
-
-            # self.final_poo_ts_list = []
+            self.poo_lc_arr = np.array([],dtype=int)   # debug only: 與 self.poo_ts_list 同步
 
             # === for 阻塞音
             self.isLowBand = False     # 強低頻帶
@@ -265,7 +214,7 @@ class Detector():
             self.ts = np.array([],dtype=float) # for debug
             self.pltdat_main = []   # for debug
             self.pltdat_env = []    # for debug
-            self.poo_lc_arr = self.poo_lc_arr - self.idxi_plt
+            self.poo_lc_arr = self.poo_lc_arr - self.idxi_plt   # debug only: 與 self.poo_ts_list 同步
             self.idxi_plt = 0   # idx offset of each input segment  # for debug plt and (aws 3sec data)index of end of data
             self.class0_lcs = np.array([],dtype=int)    # for debug
             self.class1_lcs = np.array([],dtype=int)    # for debug
@@ -277,13 +226,9 @@ class Detector():
             # else:
             #     self.poo_lc_i = len(self.poo_ts_list)
             #     self.poo_lc_arr = self.poo_lc_arr[-self.poo_lc_i:]
-            # self.absnd_timeslot_pltlist = []   # debug only
-            # self.unstable_timeslot_pltlist = [] # debug only
             self.c1_density_pltlist = [] # for debug
             self.c2_density_pltlist = [] # for debug
             # self.high_c1_density_cnt_pltlist = [] # for debug
-            self.pltdat_100lp_seg = []    # for debug
-            self.pltdat_100lp_shortseg = []    # for debug
 
             # = 強低頻帶 for 阻塞音
             self.isLowBand = False
@@ -291,20 +236,12 @@ class Detector():
         
         if closegrp:
             self.msg += f"reset  proc={proc}  all={all}  closegrp={closegrp}\n"
-            # self.has_class2 = False
-            # self.is_turned = False
-            # self.has_sharp_turn = False
-            # self.is_over_lvl_UL = False
             self.is_prominent = False
             self.grp_duration = 0
             self.pre_intvl = 0
             self.cnt_marked = 0
-            # self.is_pre_class1 = False
-            # self.harmonic_turns = 0
             self.mx_marked_density = 0
-            # self.is_priorP_prominent = False
             self.is_prominent_cnt = 0   # for estimation of poo candidate point density
-            # self.grp_pk_lvl = 0
 
         if closeObsSnd:
             tlc_tmp_list = []
@@ -320,25 +257,146 @@ class Detector():
             strongLowBandCnt = 0
             lowBandCnt = 0
             self.isLowBand = False
+            isMoreThan2 = False
+            isMoreThan1 = False
+            breakCnt = 0
 
             vars = (tlc_tmp_list,flc_tmp_list,last_pk_lc,last_pk_lvl,pk_lvl_list,
-                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,strongLowBandCnt,lowBandCnt)
+                    veryLowFreqCnt,isVeryLowfreq,isContiVeryLowFreq,isStrongLowBand,
+                    strongLowBandCnt,lowBandCnt,isMoreThan2,isMoreThan1,breakCnt)
 
             return vars
-    
-    def formatMsg(self,msg,typ='f3'):
-        ''' only for debug'''
-        if msg is None:
-            return msg
-        msg = np.array(msg)
-        if typ[0] == 'f':
-            return np.around(msg,int(typ[1])).tolist()
-        elif typ[0] == 'e':
-            str_list = []
-            for i in msg:
-                str_list.append(f"{np.format_float_scientific(i,int(typ[1]))}")
-            return str_list
+        
+    def var2self(self,var):
+        print(f"load dynamic parameters from var")
+        # self.toffset = var['toffset']
+        self.zi_main = var['zi_main']
+        self.ti = var['ti']
+        self.t0 = var['t0']
+        self.tNow = var['tNow']
+        self.idxi_plt = var['idxi_plt'] # for debug plt and (aws 3sec data)index of end of data
 
+        # === for stream
+        self.lastMainSndData = var['lastMainSndData']
+        
+        # === findspike
+        # = 校正強度門檻
+        self.ref_lvl = None
+
+        # === abnormal sound
+        self.has_high_c1_density = var['has_high_c1_density']    # 若沒有poo  has_high_c1_density也沒有 ==> 才進行呼吸異音與大聲腸鳴偵測
+                    
+        # = poo sound
+        self.is_prominent = var['is_prominent']   # 特別突出的
+        self.is_prominent_cnt = var['is_prominent_cnt']
+        self.last_idxs_gap_lc_is_prominent = var['last_idxs_gap_lc_is_prominent']
+        self.last_abs_onestep_gap_next = var['last_abs_onestep_gap_next']
+        self.last_abs_onestep_gap = var['last_abs_onestep_gap']
+        self.last_idxs_gap_lc = var['last_idxs_gap_lc']
+        self.last_idxs_gap_lvl = var['last_idxs_gap_lvl']   # 用於結合下一段資料再來決定 last_idxs_gap_lc_is_prominent
+        self.last_idxs_gap_ref_lvl = var['last_idxs_gap_ref_lvl']   # 保留到下一段，當下一段的第一個idx_gaps前面的資料點不足，可以加入
+        self.grp_start_sec = var['grp_start_sec']
+        self.grp_duration = var['grp_duration']
+        self.pre_intvl = var['pre_intvl']
+        self.cnt_marked = var['cnt_marked']
+        self.mx_marked_density = var['mx_marked_density']
+        self.is_priorP_pk = var['is_priorP_pk']
+        self.poo_ts_list = var['poo_ts_list']
+
+        self.poo_lc_arr = np.array(var['poo_lc_arr']).astype('int') # debug
+        # print(f"var2self: self.poo_lc_arr={self.poo_lc_arr}  var['poo_lc_arr']={var['poo_lc_arr']}")
+
+        # === reset for 阻塞音
+        # 因為目前obs的判斷沒有stream的概念，而是每三秒的spectrogram獨立去判斷(因為之前只限定不連續的三秒資料，所以就沒有寫有連續資料的狀態)
+        self.isLowBand = False     # 強低頻帶
+        self.isHighPk = 0     # 強:2, 中:1, 弱:0
+
+    def load_context(self,):    # 載入前一次的動態參數
+        print('load_context')
+        
+        var=CU.get_cache_data(self.varkey)
+        if(var is not None):# 表示有前一次的參數
+            if 'toffset' in var:
+                print(f"self.toffset({self.toffset:.3f}) - var['toffset']({var['toffset']:.3f}) = {self.toffset - var['toffset']:.3f}")
+            if ('toffset' not in var
+                    or (self.toffset - var['toffset'] > self.tdiff_th_sec)):   # 間隔超出上限 => 非連續
+                print('not consecutive data => reset all!')
+                self.reset(all=True)
+            else:
+                self.var2self(var)
+        else:
+            print('no preset var')
+            self.reset(all=True)
+        
+        #if os.path.exists(self.varfn):  # 表示有前一次的參數
+        #    with open(self.varfn, 'r', newline='') as jf:
+        #        var = json.loads(jf.read())
+        #    if 'toffset' in var:
+        #        print(f"self.toffset({self.toffset:.3f}) - var['toffset']({var['toffset']:.3f}) = {self.toffset - var['toffset']:.3f}")
+        #    if ('toffset' not in var
+        #            or (self.toffset - var['toffset'] > self.tdiff_th_sec)):   # 間隔超出上限 => 非連續
+        #        print('not consecutive data => reset all!')
+        #        self.reset(all=True)
+        #    else:
+        #        self.var2self(var)
+        #else:
+        #    print('no preset var')
+        #    self.reset(all=True)
+
+    def save_context(self,):
+        #print('save_context to',self.varfn)
+        var = {}
+        var['zi_main'] = self.zi_main.tolist()
+        var['toffset'] = self.toffset
+        var['ti'] = self.ti
+        var['t0'] = self.t0
+        var['tNow'] = self.tNow
+        var['idxi_plt'] = self.idxi_plt # for debug plt and (aws 3sec data)index of end of data
+
+        # === for stream
+        var['lastMainSndData'] = self.lastMainSndData.tolist()
+        
+        # === findspike
+        # = 校正強度門檻
+        self.ref_lvl = None
+
+        # === abnormal sound
+        # 若沒有poo  has_high_c1_density也沒有 ==> 才進行呼吸異音與大聲腸鳴偵測
+        # 因為之前都是每一個新檔案(~3秒)就reset，並沒有保留的概念，而且這個目前只用於 要不要 進入 poo以外的偵測，所以暫時就不動
+        var['has_high_c1_density'] = False  #self.has_high_c1_density
+                    
+        # = poo sound
+        # == 有些特別加上 bool, int 是因為json dump時不接受numpy的東西
+        var['is_prominent'] = bool(self.is_prominent)   # 特別突出的
+        var['is_prominent_cnt'] = self.is_prominent_cnt
+        var['last_idxs_gap_lc_is_prominent'] = bool(self.last_idxs_gap_lc_is_prominent)
+        var['last_abs_onestep_gap_next'] = self.last_abs_onestep_gap_next
+        var['last_abs_onestep_gap'] = self.last_abs_onestep_gap
+        var['last_idxs_gap_lc'] = int(self.last_idxs_gap_lc) if self.last_idxs_gap_lc is not None else self.last_idxs_gap_lc
+        var['last_idxs_gap_lvl'] = self.last_idxs_gap_lvl   # 用於結合下一段資料再來決定 last_idxs_gap_lc_is_prominent
+        var['last_idxs_gap_ref_lvl'] = self.last_idxs_gap_ref_lvl   # 保留到下一段，當下一段的第一個idx_gaps前面的資料點不足，可以加入
+        var['grp_start_sec'] = self.grp_start_sec
+        var['grp_duration'] = int(self.grp_duration)
+        var['pre_intvl'] = int(self.pre_intvl)
+        var['cnt_marked'] = self.cnt_marked
+        var['mx_marked_density'] = self.mx_marked_density
+        var['is_priorP_pk'] = self.is_priorP_pk
+        var['poo_ts_list'] = self.poo_ts_list
+
+        var['poo_lc_arr'] = self.poo_lc_arr.tolist() # debug
+
+        CU.set_cache_data(self.varkey,var,3*60)
+
+        #try:
+        #    with open(self.varfn, 'w', newline='') as jout:
+        #        json.dump(var, jout, ensure_ascii=False)
+        #except:
+        #    print('json dump fails')
+        #    for key in var.keys():
+        #        print(key, var[key])
+        #        json.dumps({key:var[key]})
+ 
+    
     def lc2ts(self,lc):
         return self.ti+self.step_sec*lc
 
@@ -733,7 +791,8 @@ class Detector():
         has_poo = self.get_poo()
 
         self.idxi_plt += maxsize_main
-        if self.idxi_plt > self.segEnd_len:    # for AWS: an indicator of end of audio data
+        if self.idxi_plt >= self.segEnd_len:    # debug 模擬aws上 結束一個新檔案的情況(每11776筆資料一個檔案)
+            # print(f"in alg: self.idxi_plt={self.idxi_plt} >= {self.segEnd_len}")
             self.poo_lc_pltarr = np.r_[self.poo_lc_pltarr, self.poo_lc_arr] # for debug
             mask = self.lc2ts(self.poo_lc_pltarr-self.idxi_plt) > self.ts[0] # for debug
             self.poo_lc_pltarr = self.poo_lc_pltarr[mask] # for debug
@@ -1290,14 +1349,11 @@ def checkWav(mic_fn):
 
     return (has_poo,has_obs)
 
-def checkRaw(ba):
+def checkRaw(ba, udid, t0):
     sig_cnt=len(ba)//2
     sig=struct.unpack('<'+'h'*sig_cnt,ba)
 
-    micsr=4000
-    pkglen=64
-    pkg_num=4
-    detectOdd = Detector(micsr=micsr,pkglen=pkglen)
+    detectOdd = Detector(udid, t0)
 
     has_poo = False
     has_obs = False
