@@ -6,7 +6,7 @@ import json
 import cache_util as CU
 
 class SleepStatus():
-    def __init__(self, udid, age, ver=20240401, scaled=True):
+    def __init__(self, udid, age, ver=20240326, scaled=True):
         self.ver = ver
         self.imusr = 104
         self.broadcast_intvl = 5
@@ -415,7 +415,7 @@ class SleepStatus():
     def getAwakeAlarm(self,vars,ts):    # awake狀態才去計算
         if (vars['sleep_start_ts']    # 非初始值 或 還沒確定
                 and ts - vars['sleep_start_ts'] > self.awakeAlarm_sleep_th_sec):    # 已經保持入睡一段時間(20min)
-            # self.debugVars['awakeAlarm_ts_list'].append(ts)
+            #self.debugVars['awakeAlarm_ts_list'].append(ts)
             return ts
         else:
             return 0
@@ -490,7 +490,7 @@ class SleepStatus():
                     #    print(f"\tlight_score={light_score}  score_str={score_str}  c10={c10}  vars['status_list'][-3:]={vars['status_list'][-3:]}")
                     if not c0:
                         # = 需要距離awake 30min 以上，且曾經有過 deep
-                        if vars['sleep_start_ts'] and ts - vars['sleep_start_ts'] > self.rem_sleep_sec_th and vars['sleep_start_ts'] < vars['last_deep_ts']:
+                        if vars['last_awake_ts'] and ts - vars['last_awake_ts'] > self.rem_sleep_sec_th and vars['last_awake_ts'] < vars['last_deep_ts']:
                             status = 'REM'
                         else:
                             status = 'light'
@@ -565,7 +565,7 @@ class SleepStatus():
         # === awakeAlarm
         if status != 'awake' and not vars['sleep_start_ts'] and ts - vars['last_awake_ts'] > 120:  # 睡眠狀態 + 離最後的清醒狀態一小段時間 才算入睡時間
             vars['sleep_start_ts'] = ts
-            # vars['last_awake_ts'] = 0
+            vars['last_awake_ts'] = 0
             #self.debugVars['sleep_start_ts_list'].append(ts)
         elif status == 'awake':
             vars['last_awake_ts'] = ts
@@ -576,7 +576,6 @@ class SleepStatus():
         if vars['goComfort'] and ts - vars['comfort_start_ts'] > 600:
             vars['goComfort'] = False
             vars['comfort_start_ts'] = 0
-            # self.debugVars['comfortOff_ts_list'].append(ts)
             
         return status
     
