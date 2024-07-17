@@ -345,19 +345,7 @@ class SleepStatus_FatalAlarm():
         vars['scDrop_bts'] = None
         vars['scDrop_ets'] = None
 
-    def safe_dumpjson(self,vars):
-        for k,obj in vars.items():
-            if isinstance(obj, np.integer):
-                vars[k] = int(obj)
-            elif isinstance(obj, np.floating):
-                vars[k] = float(obj)
-            elif isinstance(obj, np.ndarray):
-                vars[k] = obj.tolist()
-            elif isinstance(obj, np.bool_):
-                vars[k] = bool(obj)
-
     def save_context(self, udid, vars={}):
-        self.safe_dumpjson(vars)
         sleep_var_key=CU.SLEEP_VAR_KEY_HEADER+udid
         res=CU.set_cache_data(sleep_var_key,vars,86400)#資料中斷超過一天就沒意義
         
