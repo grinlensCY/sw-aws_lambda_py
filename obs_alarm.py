@@ -3,7 +3,7 @@ import json
 import cache_util as CU
 
 class ObsAlarm():
-    def __init__(self, udid, ver=20230118):
+    def __init__(self, udid, ver=20240509):
         self.ver = ver
         
         # === default
@@ -49,7 +49,8 @@ class ObsAlarm():
         obs_ts_arr = np.r_[obs_ts_arr[mask], ts]
         obs_res_arr = np.r_[obs_res_arr[mask], has_obs]
 
-        alarm = obs_ts_arr.size >= 15 and ts-obs_res_arr[0] >= 115 and np.count_nonzero(obs_res_arr)/obs_res_arr.size > 0.66
+        # alarm = obs_ts_arr.size >= 15 and ts-obs_res_arr[0] >= 115 and np.count_nonzero(obs_res_arr)/obs_res_arr.size > 0.66
+        alarm = np.count_nonzero(obs_res_arr) >= 25
 
         vars = {'obs_ts_list': obs_ts_arr.tolist(),
                 'obs_res_list': obs_res_arr.tolist()}
