@@ -8,7 +8,7 @@ from os import SEEK_SET, SEEK_CUR, SEEK_END
 import cache_util as CU
 
 class Detector():
-    def __init__(self, udid, t0, age, micsr=4000, pkglen=64, pkgnum=4, tsHz=32768, istsec=True, len_UL=12000, ver=20240717.1):
+    def __init__(self, udid, t0, age, micsr=4000, pkglen=64, pkgnum=4, tsHz=32768, istsec=True, len_UL=12000, ver=20240617.0):
         # ver: 小數點 代表是不影響演算法的小改版
         # 導入AWS時，要修改 註解裡有AWS(大寫) 與 移除debug的段落!
         # 20240118 review:因為目前obs的判斷沒有stream的概念，而是每三秒(~2.936sec)的spectrogram獨立去判斷(因為之前只限定不連續的三秒資料)
@@ -161,7 +161,7 @@ class Detector():
         self.calc_reflvl_halflen = int(self.calc_reflvl_halflen_sec*self.micsr)
         self.grp_intvl_th = self.grp_intvl_th_sec*self.micsr
 
-        self.poo_stft_t_step = (self.poo_stft_nperseg - self.poo_stft_noverlap)/self.micsr
+        self.poo_stft_t_step = (self.poo_stft_nperseg - self.poo_stft_noverlap)/micsr
         self.poo_long_LL = 0.28 // self.poo_stft_t_step   # 超出這長度才能算poo
         self.poo_long_LL0 = 0.1//self.poo_stft_t_step   # 超出這長度，可以放寬低頻要求
     
@@ -369,29 +369,17 @@ class Detector():
         
         var=CU.get_cache_data(self.varkey)
         if(var is not None):# 表示有前一次的參數
-            self.var2self(var)
             if 'toffset' in var:
                 print(f"self.toffset({self.toffset:.3f}) - var['toffset']({var['toffset']:.3f}) = {self.toffset - var['toffset']:.3f}")
             if ('toffset' not in var
                     or (self.toffset - var['toffset'] > self.tdiff_th_sec)):   # 間隔超出上限 => 非連續
                 print('not consecutive data => reset all!')
-                last_poo_ts = self.last_poo_ts
                 self.reset(all=True)
-                self.last_poo_ts = last_poo_ts
+            else:
+                self.var2self(var)
         else:
             print('no preset var')
             self.reset(all=True)
-    
-    def safe_dumpjson(self,vars):
-        for k,obj in vars.items():
-            if isinstance(obj, np.integer):
-                vars[k] = int(obj)
-            elif isinstance(obj, np.floating):
-                vars[k] = float(obj)
-            elif isinstance(obj, np.ndarray):
-                vars[k] = obj.tolist()
-            elif isinstance(obj, np.bool_):
-                vars[k] = bool(obj)
 
     def save_context(self,):
         #print('save_context to',self.varfn)
@@ -450,8 +438,6 @@ class Detector():
         # debug
         # var['poo_lc_arr'] = self.poo_lc_arr.tolist()
         # var['poo_timespans'] = self.poo_timespans   # debug
-        
-        self.safe_dumpjson(var)
 
         CU.set_cache_data(self.varkey,var,3*60)
 
@@ -1551,7 +1537,6 @@ def checkRaw(ba, udid, t0, age):
     if not has_poo and not detectOdd.has_high_c1_density and main_dat is not None:     # for AWS
         has_obs = detectOdd.has_obs(main_dat, ts)
         #20230920出現main_dat未被設定的錯誤，進行臨時的處理
-    detectOdd.save_context()  # 把最後的參數存起來    # for AWS
 
     return (has_poo,has_obs)
 
