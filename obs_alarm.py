@@ -3,7 +3,7 @@ import json
 import cache_util as CU
 
 class ObsAlarm():
-    def __init__(self, udid, ver=20240509):
+    def __init__(self, udid, ver=20240718):
         self.ver = ver
         
         # === default
@@ -24,6 +24,8 @@ class ObsAlarm():
             res['obs_ts_list']=[]
         if 'obs_res_list' not in res:
             res['obs_res_list']=[]
+        if 'obs_alarm_list' not in res:
+            res['obs_alarm_list'] = []
         return res
         
         #with open(f"obsalarm_{udid}.json", 'r', newline='') as jf:
@@ -52,7 +54,15 @@ class ObsAlarm():
         # alarm = obs_ts_arr.size >= 15 and ts-obs_res_arr[0] >= 115 and np.count_nonzero(obs_res_arr)/obs_res_arr.size > 0.66
         alarm = np.count_nonzero(obs_res_arr) >= 25
 
+        # 保存7天內的alarm
+        obs_alarm_ts_arr = np.array(vars['obs_alarm_list'])
+        mask = obs_alarm_ts_arr > ts - 604800
+        obs_alarm_ts_arr = obs_alarm_ts_arr[mask]
+        if alarm:
+            obs_alarm_ts_arr = np.r_[obs_alarm_ts_arr, ts]
+
         vars = {'obs_ts_list': obs_ts_arr.tolist(),
-                'obs_res_list': obs_res_arr.tolist()}
+                'obs_res_list': obs_res_arr.tolist(),
+                'obs_alarm_list': obs_alarm_ts_arr.tolist()}
         self.save_context(udid,vars)      # 用於AWS
         return alarm     # 用於AWS
