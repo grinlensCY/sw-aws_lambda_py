@@ -30,7 +30,7 @@ class Sleep(enum.IntEnum):
 
 
 class SleepStatus_FatalAlarm():
-    def __init__(self, udid, age, ver=20241227, scaledSC=True):
+    def __init__(self, udid, age, ver=20240918, scaledSC=True):
         self.ver = ver
         self.imusr = 104
         self.broadcast_intvl = 5
@@ -511,8 +511,6 @@ class SleepStatus_FatalAlarm():
         if not lcf2:
             return [lcf2,[]]
         lci = self.get_NsecLong_Idx(tsData[:lcf],stride_sec)
-        if not lci:
-            return [lci,[]]
         tsData = tsData[lci:]
         scData = scData[lci:]
         hrData = hrData[lci:]
