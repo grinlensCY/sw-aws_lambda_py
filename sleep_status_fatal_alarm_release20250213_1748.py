@@ -30,7 +30,7 @@ class Sleep(enum.IntEnum):
 
 
 class SleepStatus_FatalAlarm():
-    def __init__(self, udid, age, ver=20250317.3, scaledSC=True):
+    def __init__(self, udid, age, ver=20250213, scaledSC=True):
         self.ver = ver
         self.imusr = 104
         self.broadcast_intvl = 5
@@ -62,41 +62,36 @@ class SleepStatus_FatalAlarm():
             self.rem_ratio_target = 0.225
         
         # === fatal alarm
-        #if age < 12:
-        #    self.rr_UL = 60
-        #    self.rr_LL = 22
-        #    self.hr_LL = 90
-        #    self.hr_UL = 220
-        #elif age < 36:
-        #    self.rr_UL = 55
-        #    self.rr_LL = 17
-        #    self.hr_LL = 81
-        #    self.hr_UL = 170
-        #elif age < 72:
-        #    self.rr_UL = 40
-        #    self.rr_LL = 13
-        #    self.hr_LL = 70
-        #    self.hr_UL = 150
-        #elif age < 120:
-        #    self.rr_UL = 30
-        #    self.rr_LL = 12 # 這已經超出目前hr/rr演算法的可偵測下限
-        #    self.hr_LL = 62
-        #    self.hr_UL = 130
-        #else:
-        #    self.rr_UL = 29
-        #    self.rr_LL = 11 # 這已經超出目前hr/rr演算法的可偵測下限
-        #    self.hr_LL = 50 # 這已經超出目前hr/rr演算法的可偵測下限
-        #    self.hr_UL = 110
-        #self.expired_min = 1800 # 大幅變化的註記多久之後就可以拋棄
+        if age < 12:
+            self.rr_UL = 60
+            self.rr_LL = 22
+            self.hr_LL = 90
+            self.hr_UL = 220
+        elif age < 36:
+            self.rr_UL = 55
+            self.rr_LL = 17
+            self.hr_LL = 81
+            self.hr_UL = 170
+        elif age < 72:
+            self.rr_UL = 40
+            self.rr_LL = 13
+            self.hr_LL = 70
+            self.hr_UL = 150
+        elif age < 120:
+            self.rr_UL = 30
+            self.rr_LL = 12 # 這已經超出目前hr/rr演算法的可偵測下限
+            self.hr_LL = 62
+            self.hr_UL = 130
+        else:
+            self.rr_UL = 29
+            self.rr_LL = 11 # 這已經超出目前hr/rr演算法的可偵測下限
+            self.hr_LL = 50 # 這已經超出目前hr/rr演算法的可偵測下限
+            self.hr_UL = 110
+        self.expired_min = 1800 # 大幅變化的註記多久之後就可以拋棄
         self.ratio_to_pre_UL = [1.1, 1.15]    # hr/rr ratio UL   if ratio to pre_val > UL => skip this
         self.ratio_to_pre_LL = [0.85, 0.85]
         self.ratio_to_ref_UL = [1.75, 1.7]
         self.ratio_to_ref_LL = [0.85, 0.65]
-
-        self.one_update_intvl = {'hr':7, 'rr': 17}  # 接收更新1次的演算法結果的時間間隔(考慮廣播間隔 與 網路延遲)
-        self.two_update_intvl = {'hr':13, 'rr': 33} # 接收更新2次的演算法結果的時間間隔(考慮廣播間隔 與 網路延遲)
-        self.fallingTime_th = {'hr':30, 'rr':50}    # 持續下降的時間要超過這個門檻
-        self.risingSoon_duration_th = {'hr': [20,45], 'rr': [35,50]}    # 定義快速上升的時間範圍
 
         '''
         self.debugVars = {  # only for debug on local, remove it if deploying on 
@@ -246,73 +241,58 @@ class SleepStatus_FatalAlarm():
                 'last_sleep_stages': [],
 
                 # === fatal alarm
-                #'last_hr_bigChange_ts':0,   # sharp_xxx_ts 要距離bigChange 11秒(兩次廣播)以上
-                #'last_rr_bigChange_ts':0,   # sharp_xxx_ts 要距離bigChange 11秒(兩次廣播)以上
-                #"hr_baseline_alarm_UL":None,    # 從baseline推算的limit
-                #"hr_baseline_alarm_LL":None,
-                #"rr_baseline_alarm_UL":None,
-                #"rr_baseline_alarm_LL":None,
-                #"hr_alarm_UL":None,    # 比較上升起點 x ratio 與 baseline_limit之後的 limit
-                #"hr_alarm_LL":None,
-                #"rr_alarm_UL":None,
-                #"rr_alarm_LL":None,
+                'last_hr_bigChange_ts':0,   # sharp_xxx_ts 要距離bigChange 11秒(兩次廣播)以上
+                'last_rr_bigChange_ts':0,   # sharp_xxx_ts 要距離bigChange 11秒(兩次廣播)以上
+                "hr_baseline_alarm_UL":None,    # 從baseline推算的limit
+                "hr_baseline_alarm_LL":None,
+                "rr_baseline_alarm_UL":None,
+                "rr_baseline_alarm_LL":None,
+                "hr_alarm_UL":None,    # 比較上升起點 x ratio 與 baseline_limit之後的 limit
+                "hr_alarm_LL":None,
+                "rr_alarm_UL":None,
+                "rr_alarm_LL":None,
 
-                #'zero_hr_cnt': 0,   # 遇到無效的hr
-                #'same_hr_cnt': 0,   # 連續一樣的hr
-                #'rt_ref_hr': 0,     # real time ref hr(和 sleepstage的baseline不同，這是用來即時判斷上升還是下降的)
-                #'hr_rising_blvl':300,
-                #'hr_rising_bts':0,
-                #'hr_rising_cnt':0,
-                #'hr_falling_blvl': 0,
-                #'hr_falling_bts':0,
-                #'hr_falling_cnt':0,
-                #'hr_has_sharp_falling_ts_list':[],
-                #'hr_has_sharp_rising_ts_list':[],
-                #'last_overUL_hr_ts': None,   # 最近一個超過UL的 [頂點時間,開始上升高度]，若下降點也很接近，下降的LL要以上升起點的高度當參考
-                #'last_overUL_hr_blvl': None,   # 最近一個超過UL的 [頂點時間,開始上升高度]，若下降點也很接近，下降的LL要以上升起點的高度當參考
-                #'last_overUL_hr_lvl': None, # debug
-                #'pre_hr_ts': 0,  # 如果距離前一個有效的hr太久，就reset
+                'zero_hr_cnt': 0,   # 遇到無效的hr
+                'same_hr_cnt': 0,   # 連續一樣的hr
+                'rt_ref_hr': 0,     # real time ref hr(和 sleepstage的baseline不同，這是用來即時判斷上升還是下降的)
+                'hr_rising_blvl':300,
+                'hr_rising_bts':0,
+                'hr_rising_cnt':0,
+                'hr_falling_blvl': 0,
+                'hr_falling_bts':0,
+                'hr_falling_cnt':0,
+                'hr_has_sharp_falling_ts_list':[],
+                'hr_has_sharp_rising_ts_list':[],
+                'last_overUL_hr_ts': None,   # 最近一個超過UL的 [頂點時間,開始上升高度]，若下降點也很接近，下降的LL要以上升起點的高度當參考
+                'last_overUL_hr_blvl': None,   # 最近一個超過UL的 [頂點時間,開始上升高度]，若下降點也很接近，下降的LL要以上升起點的高度當參考
+                'last_overUL_hr_lvl': None, # debug
                 
-                #'zero_rr_cnt': 0,
-                #'same_rr_cnt': 0,
-                #'rt_ref_rr': 0,
-                #'rr_rising_blvl':300,
-                #'rr_rising_bts':0,
-                #'rr_rising_cnt':0,
-                #'rr_falling_blvl': 0,
-                #'rr_falling_bts':0,
-                #'rr_falling_cnt':0,
-                #'rr_has_sharp_falling_ts_list':[],
-                #'rr_has_sharp_rising_ts_list':[],
-                #'last_overUL_rr_ts': None,
-                #'last_overUL_rr_blvl': None,
-                #'last_overUL_rr_lvl': None, # debug
-                #'pre_rr_ts': 0,  # 如果距離前一個有效的rr太久，就reset
+                'zero_rr_cnt': 0,
+                'same_rr_cnt': 0,
+                'rt_ref_rr': 0,
+                'rr_rising_blvl':300,
+                'rr_rising_bts':0,
+                'rr_rising_cnt':0,
+                'rr_falling_blvl': 0,
+                'rr_falling_bts':0,
+                'rr_falling_cnt':0,
+                'rr_has_sharp_falling_ts_list':[],
+                'rr_has_sharp_rising_ts_list':[],
+                'last_overUL_rr_ts': None,
+                'last_overUL_rr_blvl': None,
+                'last_overUL_rr_lvl': None, # debug
 
                 'fatal_alram_mute_ets':0,   # alaram之後的10min都不再發出
                 'last3_fatalalarm_ts': [],    # 單純是為了能在即時收錄的時候記錄到fatalalarm
+
             }
-        	# is_fatal
-            for typ in ['hr','rr']:
-                res[f"lastest_{typ}_baseline"] = None
-                res[f"{typ}_baseline_alarm_UL"] = None    # 從baseline推算的limit
-                res[f"{typ}_baseline_alarm_LL"] = None
-
-                res[f'{typ}_risingTime'] = 0
-                res[f'{typ}_fallingTime'] = 0
-                res[f'same_{typ}_duration'] = 0
-                res[f'zero_{typ}_duration'] = 0
-
-                res[f'{typ}_isRisingSoon'] = False
-                res[f'{typ}_overUL_ts'] = 0
-                res[f'{typ}_pulse_ets'] = 0
         # else:
         #     # with open(f"sleepstat_{udid}.json", 'r', newline='') as jf:
         #     #     res = json.loads(jf.read())
         #     res = self.vars # 因為讀取檔案會很慢，為了加速開發，改用這樣的方式
         return res
 
-    def clear_sleepVars(self,vars,ts):  #,udid,saveJson=False):
+    def clear_vars(self,vars):  #,udid,saveJson=False):
         # if saveJson:
         #     cnt = 1
         #     fn = f"sleepstat_{udid}_vars_mxsize_{cnt}.json"
@@ -321,50 +301,16 @@ class SleepStatus_FatalAlarm():
         #         fn = f"sleepstat_{udid}_vars_mxsize_{cnt}.json"
         #     with open(fn, 'w', newline='') as jout:
         #         json.dump(vars, jout, ensure_ascii=False, cls=NumpyEncoder)
-        #        try:
-        #            json.dump(vars, jout, ensure_ascii=False)
-        #        except:
-        #            for k,i in vars.items():
-        #                print(f"{k}:{i}  type={type(i)}")
-        #                if k == 'hr_baseline':
-        #                    for ii in i:
-        #                        for iii in ii:
-        #                            print(iii,type(iii))
-        #                            print('integer',isinstance(iii, np.integer))
-        #                            print('float',isinstance(iii, np.floating))
-        #                json.dumps({k:vars[k]})
-
-        #msg = f"{len(vars['hr_baseline'])=}  "
-        #if len(vars['hr_baseline']) > 1:
-        #    msg += f"{ts - vars['hr_baseline'][-1][1]=} < 432000?{ts - vars['hr_baseline'][-1][1] < 432000}  "
-        if len(vars['hr_baseline']) > 1 and ts - vars['hr_baseline'][-1][1] < 432000:  # 有累積50分鐘以上 不超過3天才保留
-            vars['hr_baseline'] = vars['hr_baseline'][-4:]
-            #msg += "==> keep last 4 hr baseline\n"
-        else:
-            vars['hr_baseline'] = []
-            #msg += "==> clear hr baseline\n"
-
-        #if len(vars['rr_baseline']) > 1:
-        #    msg += f"{ts - vars['rr_baseline'][-1][1]=} < 432000?{ts - vars['rr_baseline'][-1][1] < 432000}  "
-        if len(vars['rr_baseline']) > 1 and ts - vars['rr_baseline'][-1][1] < 432000:  # 有累積50分鐘以上 不超過3天才保留
-            vars['rr_baseline'] = vars['rr_baseline'][-4:]
-            #msg += "==> keep last 4 rr baseline\n"
-        else:
-            vars['rr_baseline'] = []
-            #msg += "==> clear rr baseline\n"
-        #print(msg)
-        #if 'clear' in msg and not self.justClearBaseline:
-        #    input('any key to continue  ')
-        #    self.justClearBaseline = True
-        #elif 'clear' not in msg:
-        #    self.justClearBaseline = False
 
         vars['ts_list'] = []
         vars['hr_list'] = []
         vars['rr_list'] = []
         vars['sc_list'] = []
+        vars['hr_baseline'] = []
+        vars['rr_baseline'] = []
+
         vars['sleep_stages'] = [] if vars['sleep_stages'][-1][0] != Sleep.AWAKE else [vars['sleep_stages'][-1]]
-        #self.aMsg(f"after clear_sleepVars: sleep_stages={vars['sleep_stages']}")
+        # self.aMsg(f"after clear_vars: sleep_stages={vars['sleep_stages']}")
         vars['sleep_bts'] = None
         vars['sleep_duration'] = 0
         vars['had_deep'] = False
@@ -451,10 +397,7 @@ class SleepStatus_FatalAlarm():
             vars['unWellAttach_bts'] = vars['unWellAttach_ets'] = None
         elif vars['unWellAttach_bts'] is not None:
             vars['unWellAttach_ets'] = ts
-            #if len(self.debugVars['unWellAttach_timespans']):
-            #    self.debugVars['unWellAttach_timespans'][-1][1] = ts
-            #else:
-            #    self.debugVars['unWellAttach_timespans'].append([vars['pre_ts'],ts])
+            # self.debugVars['unWellAttach_timespans'][-1][1] = ts
         else:
             vars['unWellAttach_bts'] = vars['pre_ts']
             vars['unWellAttach_ets'] = ts
@@ -607,7 +550,7 @@ class SleepStatus_FatalAlarm():
                 if not lcf:
                     break
                 tsData,scData,hrData,rrData = datalist
-                # self.aMsg(f"data_density < 0.8 ==> stride data to:{tsData[[0,lcf]]}",2)
+                # self.aMsg(f"stride data to:{tsData[[0,lcf]]}",2)
                 continue
             # check high stillCnt density 
             highSC_density = np.count_nonzero(scData[:lcf] >= self.calcBL_stillCnt_LL) / lcf
@@ -617,13 +560,11 @@ class SleepStatus_FatalAlarm():
                 self.extend_last_BL_timespan(vars,tsData[0],tsData[lcf])
                 lcf, datalist = self.stride_data(tsData,scData,hrData,rrData,self.calcBL_step_sec,lcf)
                 if not lcf:
-                    #self.aMsg(f"not lcf ==> break",2)
                     break
                 tsData,scData,hrData,rrData = datalist
-                #self.aMsg(f"highSC_density < 0.8 ==> stride data to:{tsData[[0,lcf]]}",2)
+                # self.aMsg(f"stride data to:{tsData[[0,lcf]]}",2)
                 continue
             # check high CL density
-            #cl_th = 5 if self.scaledSC else 0.5 # debug
             highHRCL_density = np.count_nonzero(hrData[:lcf,1] >= 5) / lcf
             highRRCL_density = np.count_nonzero(rrData[:lcf,1] >= 5) / lcf
             # self.aMsg(f"highHRCL_density={highHRCL_density:.3f}  highRRCL_density={highRRCL_density:.3f}",1)
@@ -635,10 +576,9 @@ class SleepStatus_FatalAlarm():
                 self.extend_last_BL_timespan(vars,tsData[0],tsData[lcf])
                 lcf, datalist = self.stride_data(tsData,scData,hrData,rrData,self.calcBL_step_sec,lcf)
                 if not lcf:
-                    #self.aMsg(f"not lcf ==> break",2)
                     break
                 tsData,scData,hrData,rrData = datalist
-                #self.aMsg(f"highHRCL_density < 0.5 and highRRCL_density < 0.5 ==> stride data to:{tsData[[0,lcf]]}",2)
+                # self.aMsg(f"stride data to:{tsData[[0,lcf]]}",2)
                 continue
             # update baseline
             hasBL = True
@@ -648,28 +588,24 @@ class SleepStatus_FatalAlarm():
             #     self.aMsg(f"no hr_baseline",1)
             if len(vars['hr_baseline']) and vars['hr_baseline'][-1][2] != -1:
                 vars['hr_baseline'][-1][1] = tsData[0]  # 因為是stride，所以改變上一個baseline的結尾，讓新的時段套用新的baseline
-                mask = np.bitwise_and(hrData[:lcf,0] < vars['hr_baseline'][-1][2]*1.3, hrData[:lcf,0] != 0)  # screen data those > 1.3X lastest baseline
-                #perc50 = np.percentile(hrData[:lcf,0][mask],50) # debug
+                mask = hrData[:lcf,0] < vars['hr_baseline'][-1][2]*1.3  # screen data those > 1.3X lastest baseline
+                # perc50 = np.percentile(hrData[:lcf,0][mask],50) # debug
                 perc40 = np.percentile(hrData[:lcf,0][mask],40)
                 # perc30 = np.percentile(hrData[:lcf,0][mask],30) # debug
 
                 if perc40 < 55:
                     vars['hr_baseline'][-1][1] = tsData[-1]
-                    self.aMsg(f"bad perc40 => extend last hr_baseline:{vars['hr_baseline'][-1]}",1)
-                    #if len(self.debugVars['hr_baseline']):
-                        #self.debugVars['hr_baseline'][-1][1] = int(tsData[-1])
+                    # self.aMsg(f"bad perc40 => extend last hr_baseline:{vars['hr_baseline'][-1]}",1)
+                    # self.debugVars['hr_baseline'][-1][1] = int(tsData[-1])
                 else:
                     vars['hr_baseline'][-1][1] = tsData[0]
                     vars['hr_baseline'].append([tsData[0],tsData[-1],round(perc40,2)])
                     # self.aMsg(f"update last two hr_baseline:{vars['hr_baseline'][-2:]}",1)
-                    # if len(self.debugVars['hr_baseline']):
-                        #self.debugVars['hr_baseline'][-1][1] = int(tsData[0])
+                    # self.debugVars['hr_baseline'][-1][1] = int(tsData[0])
                     # self.debugVars['hr_baseline'].append([int(tsData[0]),int(tsData[-1]),float(perc40)])
                 
-                # if len(self.debugVars['hr_baseline_50th']):
-                    #self.debugVars['hr_baseline_50th'][-1][1] = int(tsData[0])
-                #if len(self.debugVars['hr_baseline_30th']):
-                    #self.debugVars['hr_baseline_30th'][-1][1] = int(tsData[0])
+                # self.debugVars['hr_baseline_50th'][-1][1] = int(tsData[0])
+                # self.debugVars['hr_baseline_30th'][-1][1] = int(tsData[0])
                 # self.debugVars['hr_baseline_50th'].append([int(tsData[0]),int(tsData[-1]),float(perc50)])
                 # self.debugVars['hr_baseline_30th'].append([int(tsData[0]),int(tsData[-1]),float(perc30)])
                 # self.aMsg(f"50th percentile={perc50}",2)
@@ -700,28 +636,24 @@ class SleepStatus_FatalAlarm():
             # else:
             #     self.aMsg(f"no rr_baseline",1)
             if len(vars['rr_baseline']) and vars['rr_baseline'][-1][2] != -1:
-                mask = np.bitwise_and(rrData[:lcf,0] < vars['rr_baseline'][-1][2]*1.3, rrData[:lcf,0] != 0)  # screen data those > 1.3X lastest baseline
-                #perc50 = np.percentile(rrData[:lcf,0][mask],50) # debug
+                mask = rrData[:lcf,0] < vars['rr_baseline'][-1][2]*1.3  # screen data those > 1.3X lastest baseline
+                # perc50 = np.percentile(rrData[:lcf,0][mask],50) # debug
                 perc40 = np.percentile(rrData[:lcf,0][mask],40)
                 # perc30 = np.percentile(rrData[:lcf,0][mask],30) # debug
 
                 if perc40 < 10:
                     vars['rr_baseline'][-1][1] = tsData[-1]
                     # self.aMsg(f"bad perc40 => extend last rr_baseline:{vars['rr_baseline'][-1]}",1)
-                    # if len(self.debugVars['rr_baseline']):
-                        #self.debugVars['rr_baseline'][-1][1] = int(tsData[-1])
+                    # self.debugVars['rr_baseline'][-1][1] = int(tsData[-1])
                 else:
                     vars['rr_baseline'][-1][1] = tsData[0]
                     vars['rr_baseline'].append([tsData[0],tsData[-1],round(perc40,2)])
                     # self.aMsg(f"update last two rr_baseline:{vars['rr_baseline'][-2:]}",1)
-                    # if len(self.debugVars['rr_baseline']):
-                        #self.debugVars['rr_baseline'][-1][1] = int(tsData[0])
+                    # self.debugVars['rr_baseline'][-1][1] = int(tsData[0])
                     # self.debugVars['rr_baseline'].append([int(tsData[0]),int(tsData[-1]),float(perc40)])
 
-                # if len(self.debugVars['rr_baseline_50th']):
-                    #self.debugVars['rr_baseline_50th'][-1][1] = int(tsData[0])
-                #if len(self.debugVars['rr_baseline_30th']):
-                    #self.debugVars['rr_baseline_30th'][-1][1] = int(tsData[0])
+                # self.debugVars['rr_baseline_50th'][-1][1] = int(tsData[0])
+                # self.debugVars['rr_baseline_30th'][-1][1] = int(tsData[0])
                 # self.debugVars['rr_baseline_50th'].append([int(tsData[0]),int(tsData[-1]),float(perc50)])
                 # self.debugVars['rr_baseline_30th'].append([int(tsData[0]),int(tsData[-1]),float(perc30)])
                 # self.aMsg(f"update last two rr_baseline:{vars['rr_baseline'][-2:]}",1)
@@ -758,25 +690,12 @@ class SleepStatus_FatalAlarm():
         if hasBL:
             # update hr/rr limit
             hr_BL_tmp_arr = np.array(vars['hr_baseline'])[:,2]
-            mask = hr_BL_tmp_arr != -1
-            hr_BL_tmp_arr = hr_BL_tmp_arr[mask]
-            if len(hr_BL_tmp_arr):
-                hr_BL_med = np.median(hr_BL_tmp_arr)
-                vars['hr_baseline_alarm_UL'] = hr_BL_med * self.ratio_to_ref_UL[0]
-                vars['hr_baseline_alarm_LL'] = hr_BL_med * self.ratio_to_ref_LL[0]
-                vars['lastest_hr_baseline'] = vars['hr_baseline'][-1][-1]
+            if -1 not in hr_BL_tmp_arr:
+                vars['hr_baseline_alarm_UL'] = np.median(hr_BL_tmp_arr) * self.ratio_to_ref_UL[0]
+                vars['hr_baseline_alarm_LL'] = np.median(hr_BL_tmp_arr) * self.ratio_to_ref_LL[0]
+            vars['rr_baseline_alarm_LL'] = np.median(np.array(vars['rr_baseline'])[:,2]) * self.ratio_to_ref_LL[1]
 
-            rr_BL_tmp_arr = np.array(vars['rr_baseline'])[:,2]
-            mask = rr_BL_tmp_arr != -1
-            rr_BL_tmp_arr = rr_BL_tmp_arr[mask]
-            if len(rr_BL_tmp_arr):
-                rr_BL_med = np.median(rr_BL_tmp_arr)
-                vars['rr_baseline_alarm_LL'] = min(rr_BL_med * self.ratio_to_ref_LL[1], rr_BL_med - 3)
-                vars['rr_baseline_alarm_UL'] = max(rr_BL_med * self.ratio_to_ref_LL[1], rr_BL_med + 3)
-                vars['lastest_rr_baseline'] = vars['rr_baseline'][-1][-1]
-
-            # self.aMsg(f"update hr/rr limit by baseline: hr={vars['hr_baseline_alarm_LL']} ~ {vars['hr_baseline_alarm_UL']};  rr={vars['rr_baseline_alarm_LL']}")
-            #self.aMsg(f"update lastest baseline: hr={vars['lastest_hr_baseline']}  rr={vars['lastest_rr_baseline']}")
+            # self.aMsg(f"update hr/rr limit by baseline: hr={vars['hr_baseline_alarm_UL']} ~ {vars['hr_baseline_alarm_LL']}  rr={vars['rr_baseline_alarm_LL']}")
 
         return hasBL
     
@@ -1044,42 +963,31 @@ class SleepStatus_FatalAlarm():
         #               f"{ss[1] < ss[2]}",1)
         return True
     
-    def reset_isfatel_tmp_vars(self,vars,typs=['hr','rr']):
-        for typ in typs:
-            vars[f'{typ}_risingTime'] = 0
-            vars[f'{typ}_fallingTime'] = 0
-            vars[f'same_{typ}_duration'] = 0
-            vars[f'zero_{typ}_duration'] = 0
-                
     def is_fatal(self,vars,ts,hrDat,rrDat,attached,status):
         # self.aMsg(f"\nis_fatal  status={status}  attached={attached}  pre_ts={vars['pre_ts']}  ts={ts}")
         if status is Sleep.NONE or not attached or vars['pre_ts'] is None or status is Sleep.AWAKE:
-            #self.aMsg(f"\nis_fatal: ts={ts}  status={status} is None/AWAKE?  attached?{attached}  pre_ts?{vars['pre_ts']}  ts={ts} => quit and return False ")
+            # self.aMsg(f"\nis_fatal: ts={ts}  status={status} is None/AWAKE?  attached?{attached}  pre_ts?{vars['pre_ts']}  ts={ts} => quit and return False ")
             return False
-        
-        if vars['sleep_bts'] is None or ts - vars['sleep_bts'] < 1200:
-            #msg = (f"\nis_fatal: ts={ts}")
-            #if vars['sleep_bts'] is None:
-            #    self.aMsg(f"{msg}  vars['sleep_bts'] is None => quit and return False")
-            #else:
-            #    self.aMsg(f"{msg} {ts - vars['sleep_bts']=:.1f} < 1200 => quit and return False")
-            return False
-        
-        if vars['hr_baseline_alarm_LL'] is None or vars['rr_baseline_alarm_LL'] is None:
-            #self.aMsg(f"{vars['hr_baseline_alarm_LL']=} is None or {vars['rr_baseline_alarm_LL']=} is None => skip")
-            return False
-        
-        #self.aMsg(f"\nis_fatal: {ts}={ts-self.debugVars['t0']}\n")
-                        
-        intvl = ts - vars['pre_ts']
-        if intvl > 17:    # 接收到的訊息間隔過長 => reset
-            #self.aMsg(f"\nis_fatal: ts({ts}) > pre_ts({vars['pre_ts']}) + 17 => reset_isfatel_tmp_vars")
-            self.reset_isfatel_tmp_vars(vars)
+                
+        if ts > vars['pre_ts'] + 17:    # 接收到的訊息間隔過長 => reset
+            # self.aMsg(f"\nis_fatal: ts({ts}) > pre_ts({vars['pre_ts']}) + 17 => reset")
+            for typ in ['hr','rr']:
+                vars[f'zero_{typ}_cnt'] = 0   # 遇到無效的hr
+                vars[f'same_{typ}_cnt'] = 0   # 連續一樣的hr
+                vars[f'rt_ref_{typ}'] = 0     # real time ref hr(和 sleepstage的baseline不同，這是用來即時判斷上升還是下降的)
+                vars[f'{typ}_rising_blvl'] = 300
+                vars[f'{typ}_rising_bts'] = 0
+                vars[f'{typ}_falling_blvl'] = 0
+                vars[f'{typ}_falling_bts'] = 0
+                vars[f'{typ}_rising_cnt'] = 0
+                vars[f'{typ}_falling_cnt'] = 0
 
         data = {'hr':hrDat, 'rr':rrDat}
         res = False
-        #clth = 5 if self.scaledSC else 0.5
-        
+        expired_t = ts - self.expired_min
+        abs_UL = [self.hr_UL, self.rr_UL]
+        abs_LL = [self.hr_LL, self.rr_LL]
+        # clth = 5 if self.scaledSC else 0.5
         for dat_idx,info in enumerate(data.items()):
             typ,(val,cl) = info
 
@@ -1087,100 +995,216 @@ class SleepStatus_FatalAlarm():
                 continue
 
             # 變化太大 不合理 => 跳過
-            if ((val >= min(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_UL[dat_idx]) # 高於 前兩筆資料最小值 * ratio_to_pre_UL
-                    or (val <= max(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_LL[dat_idx])):    # 低於 前兩筆資料最大值 * ratio_to_pre_LL
-                #vars[f'last_{typ}_bigChange_ts'] = ts
-                #self.aMsg(f"\nis_fatal: bigChange  {typ}({val}) >= "
-                #          f"min(pre({vars[f'pre_{typ}']}), pre2({vars[f'pre2_{typ}']}))*{self.ratio_to_pre_UL[dat_idx]}="
-                #          f"{min(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_UL[dat_idx]:.2f}  OR  "
-                #          f"<= {max(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_LL[dat_idx]:.2f}",1)
-                #self.debugVars[f'bigChange_{typ}_list'].append([ts,val])
+            if ((val >= min(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_UL[dat_idx])
+                    or (val <= max(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_LL[dat_idx])):
+                vars[f'last_{typ}_bigChange_ts'] = ts
+                # self.aMsg(f"\nis_fatal: bigChange at ts={ts}={ts-self.debugVars['t0']}  {typ}({val}) >= "
+                #           f"min(pre({vars[f'pre_{typ}']}), pre2({vars[f'pre2_{typ}']}))*{self.ratio_to_pre_UL[dat_idx]}="
+                #           f"{min(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_UL[dat_idx]:.2f}  OR  "
+                #           f"<= {max(vars[f'pre_{typ}'], vars[f'pre2_{typ}'])*self.ratio_to_pre_LL[dat_idx]:.2f}")
+                # self.debugVars[f'bigChange_{typ}_list'].append([ts,val])
                 continue
                 
-            # = remove expired pulse_ets
-            if ts - vars[f'{typ}_pulse_ets'] > 1200:
-                vars[f'{typ}_pulse_ets'] = 0
-                #self.aMsg(f"reset expired {typ}_pulse_ets",1)
+            # 可能還是亂跳之後不穩定的情況(尤其是RR)
+            if ts - vars[f'last_{typ}_bigChange_ts'] <= 11:
+                continue
+
+            # = remove expired sharp cnt
+            for typ2 in ['falling','rising']:
+                orig_idx = -1
+                for t in vars[f'{typ}_has_sharp_{typ2}_ts_list'][::-1]:
+                    if t <= expired_t:
+                        del vars[f'{typ}_has_sharp_{typ2}_ts_list'][orig_idx]
+                        orig_idx += 1
+                    orig_idx -= 1
 
             if not val:    # 不是有效的hr, rr
-                vars[f'zero_{typ}_duration'] += intvl
-                if vars[f'zero_{typ}_duration'] > self.one_update_intvl[typ]: # 太多次就得要reset
-                    #self.aMsg(f"{typ}  zero_duration={vars[f'zero_{typ}_duration']} > {self.one_update_intvl[typ]} ==> reset_isfatel_tmp_vars",1)
-                    self.reset_isfatel_tmp_vars(vars,[typ])
+                vars[f'zero_{typ}_cnt'] += 1
+                if vars[f'zero_{typ}_cnt'] > 2: # 太多次就得要reset
+                    vars[f'{typ}_rising_cnt'] = vars[f'{typ}_falling_cnt'] = 0
             else:
-                vars[f'zero_{typ}_duration'] = 0
+                # pre2,pre都有值, pre2 != pre(有轉折), pre2 => 即時的參考值
+                if vars[f'pre2_{typ}'] and vars[f'pre_{typ}'] and vars[f'pre2_{typ}'] != vars[f'pre_{typ}']:
+                    vars[f'rt_ref_{typ}'] = vars[f'pre2_{typ}']
+                    # self.debugVars[f'rt_ref_{typ}_list'].append([vars['pre2_ts'],vars[f'rt_ref_{typ}']])
 
-                if val < vars[f'pre_{typ}']:
-                    vars[f'same_{typ}_duration'] = 0
-
-                    if val <= vars[f'lastest_{typ}_baseline']:
-                        vars[f"{typ}_risingTime"] = vars[f"{typ}_overUL_ts"] = 0
-                        vars[f"{typ}_isRisingSoon"] = False
-                        vars[f"{typ}_fallingTime"] += intvl
-                        #self.aMsg(f'fallingTime({vars[f"{typ}_fallingTime"]}) > {self.fallingTime_th[typ]}?  '
-                        #          f'{val=} <= {vars[f"{typ}_baseline_alarm_LL"]}?  '
-                        #          f'{vars[f"{typ}_pulse_ets"]=}',1)
-                        if (vars[f"{typ}_fallingTime"] > self.fallingTime_th[typ]
-                                and val <= vars[f"{typ}_baseline_alarm_LL"]
-                                and ((typ == 'hr' and vars[f"{typ}_pulse_ets"]) or (typ == 'rr'))):
-                            res = True
-                            #self.debugVars['fatal_alarm_ts_list'].append(ts)
-                            #self.aMsg(f"got {typ} fatal alarm ts at "
-                            #        f"({time.strftime('%Y%m%d_%H%M',time.localtime(ts))})",2)
-
-                    else:   # 確認是不是有 像pulse的狀況(快速起伏)
-                        vars[f"{typ}_fallingTime"] = 0
-                        if vars[f"{typ}_isRisingSoon"]:
-                            self.aMsg(f"isRisingSoon: {val=} < {vars[f'lastest_{typ}_baseline']=:.2f}*1.15={vars[f'lastest_{typ}_baseline']*1.15:.2f}",1)
-                            if val < vars[f'lastest_{typ}_baseline']*1.15 and ts - vars[f'{typ}_overUL_ts'] < 120:
-                                vars[f'{typ}_pulse_ets'] = ts
-                                vars[f"{typ}_isRisingSoon"] = False
-                                #self.aMsg(f"got a valid {vars[f'{typ}_pulse_ets']=}",2)
-                                #self.debugVars[f'{typ}_pulse_ets_list'].append(ts)
-                        else:
-                            if (vars[f'{typ}_overUL_ts']
-                                    and self.risingSoon_duration_th[typ][0] <= vars[f"{typ}_risingTime"] <= self.risingSoon_duration_th[typ][1]):
-                                vars[f"{typ}_isRisingSoon"] = True
-                            else:
-                                vars[f'{typ}_overUL_ts'] = 0
-                            vars[f"{typ}_risingTime"] = 0
-                elif val > vars[f'pre_{typ}']:
-                    vars[f"{typ}_fallingTime"] = vars[f'same_{typ}_duration'] = 0
-
-                    if val <= vars[f'lastest_{typ}_baseline']:
-                        vars[f"{typ}_risingTime"] = vars[f"{typ}_overUL_ts"] = 0
-                    else:   # 高於baseline的才有意義
-                        vars[f"{typ}_risingTime"] += intvl
-                        if val >= vars[f"{typ}_baseline_alarm_UL"]:
-                            vars[f'{typ}_overUL_ts'] = ts
-                        else:
-                            vars[f'{typ}_overUL_ts'] = 0
+                # 如果連續4個都不變，就重置 rising/falling cnt
+                if val == vars[f'pre_{typ}']:
+                    vars[f'same_{typ}_cnt'] += 1
+                    if vars[f'same_{typ}_cnt'] > 3:
+                        vars[f'{typ}_rising_cnt'] = vars[f'{typ}_falling_cnt'] = 0
                 else:
-                    vars[f'same_{typ}_duration'] += intvl
-                    if vars[f'same_{typ}_duration'] > self.one_update_intvl[typ]:
-                        self.reset_isfatel_tmp_vars(vars,[typ])
+                    vars[f'same_{typ}_cnt'] = 0
+                
+                # 雖然還是等值，但最後可能會覺得還在uptrend上, 所以暫時允許
+                # 這段用來更新 上升下降的起始點 與 limit
+                if vars[f'same_{typ}_cnt'] <= 3:
+                    if vars[f'rt_ref_{typ}'] and val > vars[f'rt_ref_{typ}']:
+                        if not vars[f'{typ}_rising_cnt']:   #定義起始點 時間 與 數值 => 順便更新 limit
+                            if vars[f"pre2_{typ}"] and vars[f"pre_{typ}"] >= vars[f"pre2_{typ}"]:
+                                vars[f"{typ}_rising_bts"] = vars['pre2_ts']
+                                alarmUL = min((vars[f'{typ}_baseline_alarm_UL'] * 0.8 + vars[f"pre2_{typ}"] * self.ratio_to_ref_UL[dat_idx] * 0.2
+                                                if vars[f'{typ}_baseline_alarm_UL'] is not None
+                                                else vars[f"pre2_{typ}"] * self.ratio_to_ref_UL[dat_idx])
+                                            , abs_UL[dat_idx])
+                                if vars[f'pre2_{typ}'] < alarmUL:
+                                    vars[f"{typ}_rising_blvl"] = vars[f'pre2_{typ}']
+                                # self.debugVars[f'{typ}_rising_start_list'].append([vars['pre2_ts'],vars[f"pre2_{typ}"]])
+                                #if 1:
+                                #    msg = (f'{vars[f"pre2_{typ}"]} * {self.ratio_to_ref_UL[dat_idx]}'
+                                #           if vars[f'{typ}_baseline_alarm_UL'] is None
+                                #           else f'{vars[f"{typ}_baseline_alarm_UL"]:.2f} * 0.8 + {vars[f"pre2_{typ}"]} * {self.ratio_to_ref_UL[dat_idx]} * 0.2)')
+                                #    msg = f"min of ({msg}, {abs_UL[dat_idx]}) "
+                                #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}):case0 risining_start at "
+                                #              f"{vars[f'{typ}_rising_bts']}({vars[f'{typ}_rising_bts']-self.debugVars['t0']})  "
+                                #              f"updated temp alarm_UL={alarmUL:.2f}  ({msg})")
+                            else:
+                                vars[f"{typ}_rising_bts"] = vars['pre_ts']
+                                alarmUL = min((vars[f'{typ}_baseline_alarm_UL'] * 0.8 + vars[f"pre_{typ}"] * self.ratio_to_ref_UL[dat_idx] * 0.2
+                                                if vars[f'{typ}_baseline_alarm_UL'] is not None
+                                                else vars[f"pre_{typ}"] * self.ratio_to_ref_UL[dat_idx])
+                                            , abs_UL[dat_idx])
+                                if vars[f'pre2_{typ}'] < alarmUL:
+                                    vars[f"{typ}_rising_blvl"] = vars[f'pre_{typ}']
+                                # self.debugVars[f'{typ}_rising_start_list'].append([vars['pre_ts'],vars[f"pre_{typ}"]])
+                                #if 1:
+                                #    msg = (f'{vars[f"pre2_{typ}"]} * {self.ratio_to_ref_UL[dat_idx]}'
+                                #           if vars[f'{typ}_baseline_alarm_UL'] is None
+                                #           else f'{vars[f"{typ}_baseline_alarm_UL"]:.2f} * 0.8 + {vars[f"pre2_{typ}"]} * {self.ratio_to_ref_UL[dat_idx]} * 0.2)')
+                                #    msg = f"max of ({msg}, {abs_UL[dat_idx]}) "
+                                #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}):case1 rising_start at "
+                                #              f"{vars[f'{typ}_rising_bts']}({vars[f'{typ}_rising_bts']-self.debugVars['t0']})  "
+                                #              f"updated temp alarm_UL={alarmUL:.2f}  ({msg})")
+                            vars[f'{typ}_alarm_UL'] = ((vars[f'{typ}_alarm_UL']*0.9 + alarmUL*0.1
+                                                            if alarmUL >= vars[f'{typ}_alarm_UL']
+                                                            else vars[f'{typ}_alarm_UL']*0.95 + alarmUL*0.05)
+                                                       if vars[f'{typ}_alarm_UL'] is not None
+                                                       else alarmUL)
+                            #msg = (f"({vars[f'{typ}_alarm_UL']:.2f}*0.9 + {alarmUL:.2f}*0.1 "
+                            #        f"if alarmUL({alarmUL:.2f}) >= {vars[f'{typ}_alarm_UL']:.2f} "
+                            #        f"else vars[f'{typ}_alarm_UL']*0.95 + alarmUL*0.05)"
+                            #        if vars[f'{typ}_alarm_UL'] is not None
+                            #        else "")
+                            #if 1:#typ == 'rr':# and (2500 < ts < 2800 or 4700 < ts < 5000):
+                            #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}): updated alarm_UL={vars[f'{typ}_alarm_UL']:.2f}  ({msg})")
 
-            #self.debugVars[f"lastest_{typ}_baseline_list"].append([ts,vars[f'lastest_{typ}_baseline']])
-            #self.debugVars[f"{typ}_baseline_alarm_UL_list"].append([ts,vars[f'{typ}_baseline_alarm_UL']])    # 從baseline推算的limit
-            #self.debugVars[f"{typ}_baseline_alarm_LL_list"].append([ts,vars[f'{typ}_baseline_alarm_LL']])
+                        vars[f'{typ}_rising_cnt'] += 1
+                        if vars[f'{typ}_rising_cnt'] > 1:  # 比較確定是rising了
+                            vars[f'{typ}_falling_cnt'] = 0
+                    elif val < vars[f'rt_ref_{typ}']:
+                        if not vars[f'{typ}_falling_cnt']:  #定義起始點 時間 與 數值 => 順便更新 limit
+                            if (vars[f'last_overUL_{typ}_ts'] is not None
+                                    and ts - vars[f'last_overUL_{typ}_ts'] < 21
+                                    and vars[f'last_overUL_{typ}_blvl'] - max(vars[f"pre_{typ}"], vars[f"pre2_{typ}"]) < 3):   # 從過高點下降的，要從前面的上升起點當基準高度
+                                vars[f"{typ}_falling_bts"] = vars[f'last_overUL_{typ}_ts']
+                                alarmLL = max(vars[f'last_overUL_{typ}_blvl'] * self.ratio_to_ref_LL[dat_idx], abs_LL[dat_idx])
+                                #self.debugVars[f'{typ}_falling_start_list'].append([vars[f"{typ}_falling_bts"], vars[f'last_overUL_{typ}_lvl']])
+                                #self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}):case0 near over alarmUL pk(lvl={vars[f'last_overUL_{typ}_lvl']}): "
+                                #          f"rising at lvl={vars[f'{typ}_rising_blvl']}")
+                                #if typ == 'rr':
+                                #    self.aMsg(f"update temp alarm_LL={alarmLL:.2f}",1)
+                            elif vars[f"pre2_{typ}"] and vars[f"pre_{typ}"] <= vars[f"pre2_{typ}"]:
+                                vars[f"{typ}_falling_bts"] = vars['pre2_ts']
+                                alarmLL = max((max(vars[f'{typ}_alarm_LL'], vars[f"pre2_{typ}"] * self.ratio_to_ref_LL[dat_idx])
+                                                           if vars[f'{typ}_baseline_alarm_LL'] is not None
+                                                           else vars[f"pre2_{typ}"] * self.ratio_to_ref_LL[dat_idx]), abs_LL[dat_idx])
+                                #self.debugVars[f'{typ}_falling_start_list'].append([vars['pre2_ts'],vars[f"pre2_{typ}"]])
+                                #if typ == 'rr':# and (2500 < ts < 2800 or 4700 < ts < 5000):
+                                #    msg = (f'{vars[f"pre2_{typ}"]} * {self.ratio_to_ref_LL[dat_idx]}'
+                                #           if vars[f'{typ}_baseline_alarm_LL'] is None
+                                #           else f'max of ({vars[f"{typ}_alarm_LL"]}, {vars[f"pre2_{typ}"]} * {self.ratio_to_ref_LL[dat_idx]})')
+                                #    msg = f"max of ({msg}, {abs_LL[dat_idx]}) "
+                                #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}):case1 falling_start at "
+                                #              f"{vars[f'{typ}_falling_bts']}({vars[f'{typ}_falling_bts']-self.debugVars['t0']})  "
+                                #              f"updated temp alarm_LL={alarmLL:.2f}  ({msg})")
+                            else:
+                                vars[f"{typ}_falling_bts"] = vars['pre_ts']
+                                alarmLL = max((vars[f'{typ}_baseline_alarm_LL'] * 0.8 + vars[f"pre_{typ}"] * self.ratio_to_ref_LL[dat_idx] * 0.2
+                                            if vars[f'{typ}_baseline_alarm_LL'] is not None
+                                            else vars[f"pre_{typ}"] * self.ratio_to_ref_LL[dat_idx])
+                                            , abs_LL[dat_idx])
+                                #self.debugVars[f'{typ}_falling_start_list'].append([vars['pre_ts'],vars[f"pre_{typ}"]])
+                                #if 1:#typ == 'rr':# and (2700 < ts < 2800 or 4900 < ts < 5000):
+                                #    msg = (f'{vars[f"pre_{typ}"]} * {self.ratio_to_ref_LL[dat_idx]}'
+                                #           if vars[f'{typ}_baseline_alarm_LL'] is None
+                                #           else f'{vars[f"{typ}_baseline_alarm_LL"]:.2f} * 0.8 + {vars[f"pre_{typ}"]} * {self.ratio_to_ref_LL[dat_idx]} * 0.2')
+                                #    msg = f"max of ({msg}, {abs_LL[dat_idx]}) "
+                                #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}):case2 falling_start at "
+                                #              f"{vars[f'{typ}_falling_bts']}({vars[f'{typ}_falling_bts']-self.debugVars['t0']})  "
+                                #              f"updated temp alarm_LL={alarmLL:.2f}  ({msg})")
+                            vars[f'{typ}_alarm_LL'] = ((vars[f'{typ}_alarm_LL']*0.9 + alarmLL*0.1
+                                                            if alarmLL <= vars[f'{typ}_alarm_LL']
+                                                            else vars[f'{typ}_alarm_LL']*0.95 + alarmLL*0.05)
+                                                       if vars[f'{typ}_alarm_LL'] is not None
+                                                       else alarmLL)
+                            #msg = (f"({vars[f'{typ}_alarm_LL']:.2f}*0.9 + {alarmLL:.2f}*0.1 "
+                            #        f"if alarmLL({alarmLL:.2f}) <= {vars[f'{typ}_alarm_LL']:.2f} "
+                            #        f"else vars[f'{typ}_alarm_LL']*0.95 + alarmLL*0.05)"
+                            #        if vars[f'{typ}_alarm_LL'] is not None
+                            #        else "")
+                            #if typ == 'rr':# and (2500 < ts < 2800 or 4700 < ts < 5000):
+                            #    self.aMsg(f"{typ} {ts}({ts-self.debugVars['t0']}): updated alarm_LL={vars[f'{typ}_alarm_LL']:.2f}  ({msg})")
+                        vars[f'{typ}_falling_cnt'] += 1
+                        if vars[f'{typ}_falling_cnt'] > 1:
+                            vars[f'{typ}_rising_cnt'] = 0
+                    
+                    if vars[f'{typ}_rising_cnt'] > 1 and vars[f'{typ}_rising_cnt'] < vars[f'{typ}_falling_cnt']:
+                        vars[f'{typ}_falling_cnt'] = 0
+                    elif vars[f'{typ}_falling_cnt'] > 1 and vars[f'{typ}_falling_cnt'] < vars[f'{typ}_rising_cnt']:
+                        vars[f'{typ}_rising_cnt'] = 0
+                
+                # self.debugVars[f'{typ}_alarm_UL_list'].append([ts,vars[f'{typ}_alarm_UL']])
+                # self.debugVars[f'{typ}_alarm_LL_list'].append([ts,vars[f'{typ}_alarm_LL']])
 
-            #if vars[f'{typ}_risingTime']:
-            #    self.debugVars[f'{typ}_risingTime_list'].append([ts,vars[f'{typ}_risingTime']])
-            #if vars[f'{typ}_fallingTime']:
-            #    self.debugVars[f'{typ}_fallingTime_list'].append([ts,vars[f'{typ}_fallingTime']])
-            #if vars[f'same_{typ}_duration']:
-            #    self.debugVars[f'same_{typ}_duration_list'].append([ts,vars[f'same_{typ}_duration']])
-            #if vars[f'zero_{typ}_duration']:
-            #    self.debugVars[f'zero_{typ}_duration_list'].append([ts,vars[f'zero_{typ}_duration']])
+                #if vars[f'{typ}_alarm_UL'] is not None and val >= vars[f'{typ}_alarm_UL']:
+                #    self.aMsg(f"{typ} overUL ts={ts}({ts-self.debugVars['t0']}): "
+                #              f"val_{val} >= {vars[f'{typ}_alarm_UL']:.2f} and 20 < {ts - vars[f'{typ}_rising_bts']} <= 60??",0)
+                #if vars[f'{typ}_alarm_LL'] is not None and val <= vars[f'{typ}_alarm_LL']:
+                #    self.aMsg(f"{typ} overLL ts={ts}({ts-self.debugVars['t0']}): "
+                #              f"val_{val} <= {vars[f'{typ}_alarm_LL']:.2f} and 20 < {ts - vars[f'{typ}_falling_bts']} <= 60??",0)
 
-            #if vars[f'{typ}_isRisingSoon']:
-            #    self.debugVars[f'{typ}_isRisingSoon_list'].append(ts)
-            #if vars[f'{typ}_overUL_ts']:
-            #    self.debugVars[f'{typ}_overUL_ts_list'].append(ts)
-            #if vars[f'{typ}_pulse_ets']:
-            #    self.debugVars[f'{typ}_pulse_ets_list'].append(ts)
+                if vars[f'{typ}_alarm_UL'] is not None and val >= vars[f'{typ}_alarm_UL']:
+                    vars[f'last_overUL_{typ}_ts'] = ts
+                    vars[f'last_overUL_{typ}_lvl'] = val
+                    vars[f'last_overUL_{typ}_blvl'] = vars[f"{typ}_rising_blvl"]
+                    # self.aMsg(f"{typ} {ts}sec({ts-self.debugVars['t0']}) lvl={val} over alarmUL: blvl={vars[f'{typ}_rising_blvl']}")
 
-        return res    # 2025.2.13 暫時先關閉  避免太多客訴
+                if vars[f'{typ}_alarm_UL'] is not None and val >= vars[f'{typ}_alarm_UL'] and 20 < ts - vars[f"{typ}_rising_bts"] <= 60:  # 超過界線 且 是合理的急速上升才算
+                    # vars[f'{typ}_has_sharp_rising_cnt'] += 1
+                    vars[f'{typ}_has_sharp_rising_ts_list'].append(ts)
+                    # self.debugVars[f'{typ}_has_sharp_rising_list'].append([ts,val])
+                    # self.aMsg(f"{typ}_has_sharp_rising ts={ts}({ts-self.debugVars['t0']}): "
+                    #          f"val_{val:.2f} >= {vars[f'{typ}_alarm_UL']:.2f} and 20 < {ts - vars[f'{typ}_rising_bts']} <= 60",0)
+                elif vars[f'{typ}_alarm_LL'] is not None and val <= vars[f'{typ}_alarm_LL'] and 20 < ts - vars[f"{typ}_falling_bts"]:
+                    # vars[f'{typ}_has_sharp_falling_cnt'] += 1
+                    vars[f'{typ}_has_sharp_falling_ts_list'].append(ts)
+                    # self.debugVars[f'{typ}_has_sharp_falling_list'].append([ts,val])
+                    # self.aMsg(f"{typ}_has_sharp_falling ts={ts}({ts-self.debugVars['t0']}): "
+                    #          f"val_{val:.2f} <= {vars[f'{typ}_alarm_LL']:.2f} and 20 < {ts - vars[f'{typ}_falling_bts']} <= 60",0)
+                
+                if ts > vars['fatal_alram_mute_ets']:
+                    c0 = vars['rr_has_sharp_falling_ts_list']
+                    c1 = (vars['hr_has_sharp_rising_ts_list'] and vars['hr_has_sharp_falling_ts_list']
+                        and (np.array(vars['hr_has_sharp_rising_ts_list']) < vars['hr_has_sharp_falling_ts_list'][-1]).any())   # hr要先急速上升 再急速下降
+                    if c0 or c1:
+                        res = True
+                        vars['fatal_alram_mute_ets'] = ts + 600
+                        if c1:  # 因為為了保留能看到"hr要先急速上升"這個條件
+                            vars['hr_has_sharp_rising_ts_list'] = []
+                        vars['hr_has_sharp_falling_ts_list'] = []
+                        vars['rr_has_sharp_falling_ts_list'] = []
+                        # self.debugVars['fatal_alarm_ts_list'].append(ts)
+                        # self.aMsg(f"{typ} fatal alarm ts={ts}({ts-self.debugVars['t0']})"
+                        #          f"({time.strftime('%Y%m%d_%H%M',time.localtime(ts))}): c0(rr)?{c0}  c1(hr)?{c1}",1)
+                elif ts <= vars['fatal_alram_mute_ets']:
+                    # vars[f'hr_has_sharp_rising_ts_list'] = [] # 因為為了保留能看到"hr要先急速上升"這個條件
+                    vars['hr_has_sharp_falling_ts_list'] = []
+                    vars['rr_has_sharp_falling_ts_list'] = []
+
+            # for typ2 in ['falling','rising']:
+            #     self.debugVars[f'{typ}_{typ2}_cnt_list'].append([ts,vars[f'{typ}_{typ2}_cnt']])
+
+        return False    # 2025.2.13 暫時先關閉  避免太多客訴
 
     def addData(self,udid,ts,hrDat,rrDat,sc,isWellAttached):
         '''
@@ -1209,8 +1233,8 @@ class SleepStatus_FatalAlarm():
                 # self.debugVars['sleep_stages'].extend(copy.deepcopy(vars['sleep_stages']))
                 sleepstages = copy.deepcopy(vars['sleep_stages']) if len(vars['sleep_stages']) > 1 else None
                 vars['last_sleep_stages'] = sleepstages
-            #self.aMsg(f"clear_sleepVars at {ts}")
-            self.clear_sleepVars(vars,udid,ts)
+            # self.aMsg(f"clear_vars at {ts}")
+            self.clear_vars(vars)   #,udid)
         elif vars['pre_ts'] is None:
             vars['pre_ts'] = ts - 5
 
@@ -1246,11 +1270,11 @@ class SleepStatus_FatalAlarm():
             if goEnd:
                 sleepstages = copy.deepcopy(vars['sleep_stages']) if len(vars['sleep_stages']) > 1 else None
                 vars['last_sleep_stages'] = sleepstages
-                #self.aMsg(f"clear_sleepVars at {ts} hasSS={hasSS}")
-                self.clear_sleepVars(vars,udid,ts)#,hasSS)    # 只有清除sleep用的
+                # self.aMsg(f"clear_vars at {ts} hasSS={hasSS}")
+                self.clear_vars(vars)   #,udid,hasSS)
             else:
-                # self.aMsg(f"clear_sleepVars at {ts} hasSS={hasSS}")
-                self.clear_vars(vars,ts)   #,udid)  clear_sleepVars(vars,udid,ts)  # 只有清除sleep用的
+                # self.aMsg(f"clear_vars at {ts} hasSS={hasSS}")
+                self.clear_vars(vars)   #,udid)
         
         fatal_alarm = False
         if self.age < 13 and vars['pre2_hr'] is not None:
