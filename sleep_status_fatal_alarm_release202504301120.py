@@ -610,7 +610,7 @@ class SleepStatus_FatalAlarm():
                 tsData,scData,hrData,rrData = datalist
                 # self.aMsg(f"data_density < 0.8 ==> stride data to:{tsData[[0,lcf]]}",2)
                 continue
-            # check high stillCnt density
+            # check high stillCnt density 
             highSC_density = np.count_nonzero(scData[:lcf] >= self.calcBL_stillCnt_LL) / lcf
             # self.aMsg(f"highSC_density={highSC_density:.3f}",1)
             if highSC_density < 0.8:

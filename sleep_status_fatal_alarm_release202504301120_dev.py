@@ -610,7 +610,7 @@ class SleepStatus_FatalAlarm():
                 tsData,scData,hrData,rrData = datalist
                 # self.aMsg(f"data_density < 0.8 ==> stride data to:{tsData[[0,lcf]]}",2)
                 continue
-            # check high stillCnt density
+            # check high stillCnt density 
             highSC_density = np.count_nonzero(scData[:lcf] >= self.calcBL_stillCnt_LL) / lcf
             # self.aMsg(f"highSC_density={highSC_density:.3f}",1)
             if highSC_density < 0.8:
@@ -1260,7 +1260,7 @@ class SleepStatus_FatalAlarm():
                 self.clear_sleepVars(vars,ts)   #,udid)  clear_sleepVars(vars,udid,ts)  # 只有清除sleep用的
         
         fatal_alarm = False
-        if self.age < 25 and vars['pre2_hr'] is not None:
+        if vars['pre2_hr'] is not None:
             fatal_alarm = self.is_fatal(vars,ts,hrDat,rrDat,isWellAttached,status)
             if fatal_alarm:
                 vars['last3_fatalalarm_ts'].append(ts)
