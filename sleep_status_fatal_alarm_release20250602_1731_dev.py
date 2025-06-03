@@ -1282,7 +1282,7 @@ class SleepStatus_FatalAlarm():
                 self.clear_sleepVars(vars,ts)   #,udid)  clear_sleepVars(vars,udid,ts)  # 只有清除sleep用的
         
         fatal_alarm = False
-        if self.age < 25 and vars['pre2_hr'] is not None:
+        if vars['pre2_hr'] is not None:
             fatal_alarm = self.is_fatal(vars,ts,hrDat,rrDat,isWellAttached,status)
             if fatal_alarm:
                 vars['last3_fatalalarm_ts'].append(ts)
